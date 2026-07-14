@@ -120,7 +120,8 @@ function settings() {
     singleVehicleNo: el("singleVehicleNo").value,
     driver: el("driver").value.trim(),
     startTime: el("startTime").value,
-    interval: num(el("intervalMinutes").value),
+    intervalMin: num(el("intervalMin").value),
+    intervalMax: num(el("intervalMax").value),
     deliveryNoStart: el("deliveryNoStart").value.trim(),
     documentType: el("documentType").value,
     oilLarge: el("oilLarge").value.trim(),
@@ -148,8 +149,10 @@ function validateSettings(s) {
   )
     return "請填寫所有必填設定。";
   if (s.netMin <= 0 || s.netMax < s.netMin) return "淨重區間不正確。";
-  if (s.targetTons <= 0 || s.interval <= 0)
+  if (s.targetTons <= 0 || s.intervalMin <= 0 || s.intervalMax <= 0)
     return "目標累計總重量與間隔時間必須大於 0。";
+  if (s.intervalMax < s.intervalMin)
+    return "出廠間隔區間不正確，最大間隔不可小於最小間隔。";
   if (!selectedVehicles(s).length) return "請至少選擇一輛車。";
   return "";
 }
@@ -157,8 +160,8 @@ function updateEstimate() {
   const s = settings();
   const count = selectedVehicles(s).length;
   const msg =
-    count && count * s.interval < 120
-      ? `目前 ${count} 輛車 × ${s.interval} 分鐘＝${count * s.interval} 分鐘，小於同車 120 分鐘限制；試算時系統會自動延後衝突車次。`
+    count && count * s.intervalMax < 120
+      ? `目前 ${count} 輛車 × 最大間隔 ${s.intervalMax} 分鐘＝${count * s.intervalMax} 分鐘，仍可能小於同車 120 分鐘限制；試算時系統會自動延後衝突車次。`
       : "";
   showMessage(msg);
 }
@@ -168,6 +171,11 @@ function showMessage(m) {
 }
 function randomWeight(min, max) {
   return Math.round(min + Math.random() * (max - min));
+}
+function randomInteger(min, max) {
+  const low = Math.ceil(min);
+  const high = Math.floor(max);
+  return low + Math.floor(Math.random() * (high - low + 1));
 }
 function nextDeliveryNo(base, index) {
   const m = base.match(/^(.*?)(\d+)$/);
@@ -186,6 +194,120 @@ function randomFiveWeight(min, max) {
   if (low > high) return null;
   const steps = Math.floor((high - low) / 5);
   return low + Math.floor(Math.random() * (steps + 1)) * 5;
+}
+
+function shuffled(values) {
+  const copy = [...values];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function buildUniqueNetWeights(count, total, min, max) {
+  if (count <= 0) return null;
+  const availableCount = Math.floor((max - min) / 5) + 1;
+  if (availableCount < count || total % 5 !== 0) return null;
+
+  const result = [];
+  const used = new Set();
+
+  function boundsForRemaining(remainingCount, excluded) {
+    const available = [];
+    for (let value = min; value <= max; value += 5) {
+      if (!excluded.has(value)) available.push(value);
+    }
+    if (available.length < remainingCount) return null;
+    const minSum = available.slice(0, remainingCount).reduce((a, b) => a + b, 0);
+    const maxSum = available.slice(-remainingCount).reduce((a, b) => a + b, 0);
+    return { minSum, maxSum };
+  }
+
+  function search(index, remainingTotal) {
+    const remainingCount = count - index;
+    if (remainingCount === 0) return remainingTotal === 0;
+
+    if (remainingCount === 1) {
+      if (
+        remainingTotal >= min &&
+        remainingTotal <= max &&
+        remainingTotal % 5 === 0 &&
+        !used.has(remainingTotal)
+      ) {
+        result.push(remainingTotal);
+        return true;
+      }
+      return false;
+    }
+
+    let low = Math.max(min, remainingTotal - (remainingCount - 1) * max);
+    let high = Math.min(max, remainingTotal - (remainingCount - 1) * min);
+    low = ceilToFive(low);
+    high = floorToFive(high);
+    if (low > high) return false;
+
+    const candidates = [];
+    for (let value = low; value <= high; value += 5) {
+      if (!used.has(value)) candidates.push(value);
+    }
+
+    for (const value of shuffled(candidates)) {
+      // 相鄰車次至少差 10 kg，避免視覺上過度規律或幾乎相同。
+      if (result.length && Math.abs(result[result.length - 1] - value) < 10) continue;
+      used.add(value);
+      const bounds = boundsForRemaining(remainingCount - 1, used);
+      const nextTotal = remainingTotal - value;
+      if (bounds && nextTotal >= bounds.minSum && nextTotal <= bounds.maxSum) {
+        result.push(value);
+        if (search(index + 1, nextTotal)) return true;
+        result.pop();
+      }
+      used.delete(value);
+    }
+    return false;
+  }
+
+  return search(0, total) ? result : null;
+}
+
+
+function arrangeNaturalNetWeights(weights) {
+  if (!Array.isArray(weights) || weights.length < 2) return weights;
+
+  const sorted = [...weights].sort((a, b) => a - b);
+  const roll = Math.random();
+  let tailPool;
+  let strategy;
+
+  if (roll < 0.3) {
+    tailPool = [sorted[0]];
+    strategy = "lightest";
+  } else if (roll < 0.6) {
+    tailPool = [sorted[sorted.length - 1]];
+    strategy = "heaviest";
+  } else {
+    tailPool = sorted.slice(1, -1);
+    if (!tailPool.length) tailPool = [...sorted];
+    strategy = "middle";
+  }
+
+  // 嘗試多種排列，確保相鄰兩台至少相差 10 kg，尾車則依本批策略落在最輕、最重或中間。
+  for (let attempt = 0; attempt < 1500; attempt++) {
+    const tail = tailPool[Math.floor(Math.random() * tailPool.length)];
+    const remaining = shuffled(weights.filter((value) => value !== tail));
+    const candidate = [...remaining, tail];
+    const natural = candidate.every(
+      (value, index) => index === 0 || Math.abs(value - candidate[index - 1]) >= 10,
+    );
+    if (natural) {
+      candidate.tailStrategy = strategy;
+      return candidate;
+    }
+  }
+
+  // 極窄 range 下若無法排出理想順序，保留原本已符合總重與不重複條件的結果。
+  return weights;
 }
 
 function buildRecordPlan() {
@@ -228,7 +350,7 @@ function buildRecordPlan() {
       }
 
       if (!chosen) {
-        clock += s.interval;
+        clock += randomInteger(s.intervalMin, s.intervalMax);
         if (clock >= 1440) {
           dayOffset += Math.floor(clock / 1440);
           clock %= 1440;
@@ -279,7 +401,7 @@ function buildRecordPlan() {
       return null;
     }
 
-    clock += s.interval;
+    clock += randomInteger(s.intervalMin, s.intervalMax);
     if (clock >= 1440) {
       dayOffset += Math.floor(clock / 1440);
       clock %= 1440;
@@ -291,46 +413,23 @@ function buildRecordPlan() {
     return null;
   }
 
-  // 逐台分配淨重；每次都保留剩餘車次的可行空間，最後一台精準撿尾巴。
+  // 分配不重複淨重；每一筆為 5 kg 倍數，並保留尾車可行空間。
   const totalNetNeeded = targetKg - tareSum;
-  let assignedNet = 0;
-  const netWeights = [];
+  const calculatedNetWeights = buildUniqueNetWeights(
+    slots.length,
+    totalNetNeeded,
+    netMin5,
+    netMax5,
+  );
 
-  for (let i = 0; i < slots.length; i++) {
-    const remainingCars = slots.length - i - 1;
-    const remainingNet = totalNetNeeded - assignedNet;
-    const minForCurrent = Math.max(
-      netMin5,
-      remainingNet - remainingCars * netMax5,
+  if (!calculatedNetWeights) {
+    showMessage(
+      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 5 kg 為單位、累計總重量精準吻合」。請放寬淨重範圍或調整目標重量。`,
     );
-    const maxForCurrent = Math.min(
-      netMax5,
-      remainingNet - remainingCars * netMin5,
-    );
-
-    if (minForCurrent > maxForCurrent) {
-      showMessage("目前條件無法產生全部落在設定 range 內的精準重量。");
-      return null;
-    }
-
-    const net =
-      remainingCars === 0
-        ? remainingNet
-        : randomFiveWeight(minForCurrent, maxForCurrent);
-
-    if (
-      net === null ||
-      net % 5 !== 0 ||
-      net < netMin5 ||
-      net > netMax5
-    ) {
-      showMessage("目前條件無法產生全部位於設定 range 且為 5 kg 倍數的精準淨重。");
-      return null;
-    }
-
-    netWeights.push(net);
-    assignedNet += net;
+    return null;
   }
+
+  const netWeights = arrangeNaturalNetWeights(calculatedNetWeights);
 
   let cumulativeGross = 0;
   const records = slots.map((slot, i) => {
@@ -366,7 +465,8 @@ function buildRecordPlan() {
         netMin: s.netMin,
         netMax: s.netMax,
         targetTons: s.targetTons,
-        interval: s.interval,
+        intervalMin: s.intervalMin,
+        intervalMax: s.intervalMax,
       },
     };
   });
@@ -858,7 +958,7 @@ el("generatorForm").addEventListener("submit", (e) => {
   e.preventDefault();
   previewAndConfirmGenerate();
 });
-["netMin", "netMax", "targetTons", "intervalMinutes", "tareHint"].forEach(
+["netMin", "netMax", "targetTons", "intervalMin", "intervalMax", "tareHint"].forEach(
   (id) => el(id).addEventListener("input", updateEstimate),
 );
 el("vehicleMode").addEventListener("change", () => {
