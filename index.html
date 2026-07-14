@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>交貨車次自動排程系統｜Prototype V7</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -56,7 +56,10 @@
           <legend>日期與時間</legend>
           <label><span>日期 *</span><input id="date" type="date" required /></label>
           <label><span>出廠開始時間 *</span><input id="startTime" type="time" value="04:19" required /></label>
-          <label><span>間隔時間（分鐘）*</span><input id="intervalMinutes" type="number" min="1" value="27" required /></label>
+          <div class="range-pair">
+            <label><span>最小間隔（分鐘）*</span><input id="intervalMin" type="number" min="1" value="20" required /></label>
+            <label><span>最大間隔（分鐘）*</span><input id="intervalMax" type="number" min="1" value="35" required /></label>
+          </div>
           <label><span>冷油／大桶</span><input id="oilLarge" placeholder="0" /></label>
           <label><span>冷油／小桶</span><input id="oilSmall" placeholder="0" /></label>
         </fieldset>
