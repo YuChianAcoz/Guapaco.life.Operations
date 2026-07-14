@@ -2,207 +2,127 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>李李摳摳｜營運紀錄後台（MVP）</title>
-  <link rel="stylesheet" href="style.css" />
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>交貨車次自動排程系統｜Prototype V7</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">🍮</div>
-      <div>
-        <div class="title">李李摳摳｜營運紀錄後台</div>
-        <div class="subtitle">收入 / 成本 / 市集 / 網路｜自動統計＋成長曲線</div>
-      </div>
-    </div>
+<header class="topbar">
+  <div><h1>交貨車次自動排程系統</h1><p>匯入車輛主檔・設定條件・一鍵產生交貨車次</p></div>
+  <div class="top-actions">
+    <label class="btn secondary file-btn">匯入車輛 Excel<input id="excelFile" type="file" accept=".xlsx,.xls,.csv" hidden /></label>
+    <button id="exportVehiclesBtn" class="btn secondary">匯出車輛主檔</button>
+    <label class="btn secondary file-btn">匯入交貨表單<input id="recordsExcelFile" type="file" accept=".xlsx,.xls,.csv" hidden /></label>
+    <button id="exportRecordsBtn" class="btn primary">匯出生成資料</button>
+  </div>
+</header>
 
-    <div class="actions">
-      <button id="btnExport" class="btn">匯出資料 JSON</button>
-      <label class="btn ghost" for="fileImport">匯入 JSON</label>
-      <input id="fileImport" type="file" accept="application/json" hidden />
-      <button id="btnReset" class="btn danger">清空資料</button>
-    </div>
-  </header>
+<main class="app-shell">
+  <section class="panel vehicle-panel">
+    <div class="panel-heading"><div><h2>一、車輛主檔</h2><span id="vehicleCount" class="muted"></span></div><button id="addVehicleBtn" class="icon-btn">＋</button></div>
+    <div class="search-wrap"><input id="vehicleSearch" type="search" placeholder="搜尋車號…" /></div>
+    <div class="table-wrap vehicle-table-wrap"><table><thead><tr><th>啟用</th><th>車號</th><th class="num">空車重（kg）</th><th>操作</th></tr></thead><tbody id="vehicleTbody"></tbody></table></div>
+    <p class="helper">勾選要參與自動排程的車輛；同一車號再次出廠必須間隔至少 120 分鐘。</p>
+  </section>
 
-  <main class="container">
-    <!-- Controls -->
-    <section class="card">
-      <div class="row wrap gap">
-        <div class="field">
-          <label>選擇月份</label>
-          <input id="monthPicker" type="month" />
-        </div>
+  <section class="panel form-panel">
+    <div class="panel-heading"><div><h2>二、自動生成條件</h2><span class="muted">累計數量以每筆總重量計算</span></div><button id="resetSettingsBtn" class="btn ghost">重設</button></div>
+    <form id="generatorForm" novalidate>
+      <div class="condition-columns paper-order">
+        <fieldset class="condition-column">
+          <legend>基本資料</legend>
+          <label><span>客戶名稱 *</span><input id="customer" required value="" /></label>
+          <label><span>送貨地點 *</span><input id="location" required value="" /></label>
+          <label><span>承運公司</span><input id="driver" /></label>
+          <label><span>車號</span><select id="vehicleMode"><option value="enabled">依啟用車輛輪排</option><option value="single">指定單一車號</option></select></label>
+          <label id="singleVehicleWrap" hidden><span>指定車號</span><select id="singleVehicleNo"></select></label>
+        </fieldset>
 
-        <div class="field">
-          <label>本月營業額目標（元）</label>
-          <input id="goalInput" type="number" min="0" step="100" placeholder="30000" />
-        </div>
-
-        <div class="field">
-          <label>&nbsp;</label>
-          <button id="btnSaveGoal" class="btn primary">儲存目標</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- KPIs -->
-    <section class="kpis">
-      <div class="kpi">
-        <div class="kpi-label">本月收入</div>
-        <div id="kpiIncome" class="kpi-value">0</div>
-        <div class="kpi-sub">市集 + 網路 + 其他</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">本月成本</div>
-        <div id="kpiCost" class="kpi-value">0</div>
-        <div class="kpi-sub">材料 / 包裝 / 攤位費 / 運費 / 其他</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">本月淨利</div>
-        <div id="kpiProfit" class="kpi-value">0</div>
-        <div class="kpi-sub">收入 - 成本</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">目標達成</div>
-        <div id="kpiProgress" class="kpi-value">0%</div>
-        <div class="kpi-sub"><span id="kpiGoalText">目標：0</span></div>
-      </div>
-    </section>
-
-    <!-- Charts -->
-    <section class="grid2">
-      <section class="card">
-        <div class="card-title">近 6 個月收入/成本/淨利（折線）</div>
-        <canvas id="lineChart" height="120"></canvas>
-      </section>
-
-      <section class="card">
-        <div class="card-title">本月收入來源（市集/網路/其他）</div>
-        <canvas id="pieChart" height="120"></canvas>
-      </section>
-    </section>
-
-    <!-- Forms -->
-    <section class="grid2">
-      <section class="card">
-        <div class="card-title">新增收入</div>
-        <form id="incomeForm" class="form">
-          <div class="row gap">
-            <div class="field">
-              <label>日期</label>
-              <input name="date" type="date" required />
-            </div>
-            <div class="field">
-              <label>金額（元）</label>
-              <input name="amount" type="number" min="0" step="1" required />
-            </div>
+        <fieldset class="condition-column">
+          <legend>單據與重量</legend>
+          <label><span>交貨單號起始值 *</span><input id="deliveryNoStart" required value="" /></label>
+          <label><span>進／出料單 *</span><select id="documentType"><option>進料單</option><option selected>出料單</option></select></label>
+          <label><span>目標累計總重量（公噸）*</span><input id="targetTons" type="number" min="0.001" step="0.001" value="" required /></label>
+          <label><span>空車重（kg）</span><input id="tareHint" type="number" min="0" placeholder="由車輛主檔自動帶入" readonly/></label>
+          <div class="range-pair">
+            <label><span>淨重下限（kg）*</span><input id="netMin" type="number" min="1" value="30000" required /></label>
+            <label><span>淨重上限（kg）*</span><input id="netMax" type="number" min="1" value="42000" required /></label>
           </div>
+          <label><span>品名</span><input id="productName" value="" /></label>
+        </fieldset>
 
-          <div class="row gap">
-            <div class="field">
-              <label>類型</label>
-              <select name="type">
-                <option value="market">市集</option>
-                <option value="online">網路</option>
-                <option value="other">其他</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>備註</label>
-              <input name="note" type="text" placeholder="例如：板橋市集 / IG禮盒" />
-            </div>
-          </div>
+        <fieldset class="condition-column">
+          <legend>日期與時間</legend>
+          <label><span>日期 *</span><input id="date" type="date" required /></label>
+          <label><span>出廠開始時間 *</span><input id="startTime" type="time" value="04:19" required /></label>
+          <label><span>間隔時間（分鐘）*</span><input id="intervalMinutes" type="number" min="1" value="27" required /></label>
+          <label><span>冷油／大桶</span><input id="oilLarge" placeholder="0" /></label>
+          <label><span>冷油／小桶</span><input id="oilSmall" placeholder="0" /></label>
+        </fieldset>
 
-          <div class="row end">
-            <button class="btn primary" type="submit">新增收入</button>
-          </div>
-        </form>
-      </section>
+        <fieldset class="condition-column">
+          <legend>其他欄位</legend>
+          <label><span>托運</span><input id="consignment" /></label>
+          <label><span>調度</span><input id="dispatcher" value="" /></label>
+          <label><span>品管</span><input id="qualityControl" /></label>
+          <label><span>監造</span><input id="supervisor" /></label>
+          <label><span>溫度</span><input id="temperature" /></label>
+          <label class="full-row"><span>備註</span><textarea id="note" rows="4" placeholder=""></textarea></label>
+        </fieldset>
+      </div>
+      <div id="validationMessage" class="validation-message" hidden></div>
+      <div class="form-actions">
+        <button type="submit" class="btn primary large">試算</button>
+      </div>
+    </form>
+  </section>
 
-      <section class="card">
-        <div class="card-title">新增成本</div>
-        <form id="costForm" class="form">
-          <div class="row gap">
-            <div class="field">
-              <label>日期</label>
-              <input name="date" type="date" required />
-            </div>
-            <div class="field">
-              <label>金額（元）</label>
-              <input name="amount" type="number" min="0" step="1" required />
-            </div>
-          </div>
+  <section class="panel records-panel">
+    <div class="panel-heading records-heading"><div><h2>三、生成結果</h2><span id="recordSummary" class="muted"></span></div><div class="filter-actions"><button id="addRecordBtn" class="btn ghost">＋ 新增一筆</button><button id="clearRecordsBtn" class="btn danger-ghost">清除全部</button></div></div>
+    <div class="table-wrap records-table-wrap"><table><thead><tr>
+      <th>車次</th>
+      <th>客戶名稱</th><th>送貨地點</th><th>承運公司</th><th>車號</th>
+      <th>交貨單號</th><th>進／出料單</th><th class="num">空車重</th><th class="num">淨重</th><th class="num">總重量</th><th class="num">累計總重（噸）</th><th>品名</th>
+      <th>日期</th><th>出廠時間</th>
+      <th>冷油／大桶</th><th>冷油／小桶</th>
+      <th>托運</th><th>調度</th><th>品管</th><th>監造</th><th>溫度</th><th>備註</th><th>操作</th>
+    </tr></thead><tbody id="recordTbody"></tbody></table></div>
+  </section>
+</main>
 
-          <div class="row gap">
-            <div class="field">
-              <label>類型</label>
-              <select name="type">
-                <option value="material">材料</option>
-                <option value="packaging">包裝</option>
-                <option value="booth">攤位費</option>
-                <option value="shipping">運費</option>
-                <option value="other">其他</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>備註</label>
-              <input name="note" type="text" placeholder="例如：奶油/麵粉/盒子/租位" />
-            </div>
-          </div>
+<dialog id="vehicleDialog"><form id="vehicleForm" method="dialog"><input type="hidden" id="vehicleEditIndex" /><h3 id="vehicleDialogTitle">新增車輛</h3><label><span>車號</span><input id="vehicleDialogNo" required /></label><label><span>空車重（kg）</span><input id="vehicleDialogTare" type="number" min="0" required /></label><div class="dialog-actions"><button type="button" id="cancelVehicleBtn" class="btn ghost">取消</button><button type="submit" class="btn primary">儲存</button></div></form></dialog>
 
-          <div class="row end">
-            <button class="btn primary" type="submit">新增成本</button>
-          </div>
-        </form>
-      </section>
-    </section>
-
-    <!-- Tables -->
-    <section class="grid2">
-      <section class="card">
-        <div class="card-title">本月收入紀錄</div>
-        <div class="table-wrap">
-          <table class="table" id="incomeTable">
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>類型</th>
-                <th class="right">金額</th>
-                <th>備註</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-title">本月成本紀錄</div>
-        <div class="table-wrap">
-          <table class="table" id="costTable">
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>類型</th>
-                <th class="right">金額</th>
-                <th>備註</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-    </section>
-
-    <footer class="footer">
-      <div>資料儲存在你的瀏覽器（localStorage）。建議每週匯出 JSON 備份一次。</div>
-    </footer>
-  </main>
-
-  <script src="app.js"></script>
-</body>
-</html>
+<dialog id="recordDialog"><form id="recordForm" method="dialog"><input type="hidden" id="recordEditId" /><h3 id="recordDialogTitle">編輯生成資料</h3><div id="recordWarning" class="edit-warning" hidden></div>
+<div class="dialog-grid record-dialog-grid">
+  <fieldset class="dialog-section"><legend>基本資料</legend>
+    <label><span>客戶名稱 *</span><input id="rdCustomer" required /></label>
+    <label><span>送貨地點 *</span><input id="rdLocation" required /></label>
+    <label><span>承運公司</span><input id="rdDriver" /></label>
+    <label><span>車號 *</span><input id="rdVehicleNo" required /></label>
+  </fieldset>
+  <fieldset class="dialog-section"><legend>單據與重量</legend>
+    <label><span>交貨單號 *</span><input id="rdDeliveryNo" required /></label>
+    <label><span>進／出料單</span><select id="rdType"><option>進料單</option><option>出料單</option></select></label>
+    <label><span>空車重（kg）*</span><input id="rdTare" type="number" required /></label>
+    <label><span>淨重（kg）*</span><input id="rdNet" type="number" required /></label>
+    <label><span>總重量（kg）</span><input id="rdGross" type="number" readonly /></label>
+    <label><span>品名</span><input id="rdProduct" /></label>
+  </fieldset>
+  <fieldset class="dialog-section"><legend>日期與時間</legend>
+    <label><span>日期 *</span><input id="rdDate" type="date" required /></label>
+    <label><span>出廠時間 *</span><input id="rdTime" type="time" required /></label>
+    <label><span>冷油／大桶</span><input id="rdOilLarge" /></label>
+    <label><span>冷油／小桶</span><input id="rdOilSmall" /></label>
+  </fieldset>
+  <fieldset class="dialog-section"><legend>其他欄位</legend>
+    <label><span>托運</span><input id="rdConsignment" /></label>
+    <label><span>調度</span><input id="rdDispatcher" /></label>
+    <label><span>品管</span><input id="rdQualityControl" /></label>
+    <label><span>監造</span><input id="rdSupervisor" /></label>
+    <label><span>溫度</span><input id="rdTemperature" /></label>
+    <label class="dialog-span-2"><span>備註</span><textarea id="rdNote" rows="3"></textarea></label>
+  </fieldset>
+</div><div class="dialog-actions"><button type="button" id="cancelRecordBtn" class="btn ghost">取消</button><button type="submit" class="btn primary">儲存並重算</button></div></form></dialog>
+<div id="toast" class="toast" hidden></div><script src="app.js"></script>
+</body></html>
