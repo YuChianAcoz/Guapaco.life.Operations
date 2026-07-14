@@ -3,6 +3,8 @@ const STORAGE = {
   vehicles: "deliveryV3.vehicles",
   records: "deliveryV3.records",
 };
+
+
 const defaults = [
   ["KLM-0817", 16200],
   ["KEJ-6876", 15100],
