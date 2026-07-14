@@ -3,8 +3,6 @@ const STORAGE = {
   vehicles: "deliveryV3.vehicles",
   records: "deliveryV3.records",
 };
-
-
 const defaults = [
   ["KLM-0817", 16200],
   ["KEJ-6876", 15100],
@@ -176,6 +174,20 @@ function nextDeliveryNo(base, index) {
   if (!m) return `${base}-${String(index + 1).padStart(3, "0")}`;
   return m[1] + String(Number(m[2]) + index).padStart(m[2].length, "0");
 }
+function ceilToFive(value) {
+  return Math.ceil(num(value) / 5) * 5;
+}
+function floorToFive(value) {
+  return Math.floor(num(value) / 5) * 5;
+}
+function randomFiveWeight(min, max) {
+  const low = ceilToFive(min);
+  const high = floorToFive(max);
+  if (low > high) return null;
+  const steps = Math.floor((high - low) / 5);
+  return low + Math.floor(Math.random() * (steps + 1)) * 5;
+}
+
 function buildRecordPlan() {
   const s = settings();
   const err = validateSettings(s);
@@ -186,14 +198,21 @@ function buildRecordPlan() {
 
   const vehicles = selectedVehicles(s);
   const targetKg = Math.round(s.targetTons * 1000);
-  let cumulativeGross = 0;
+  const netMin5 = ceilToFive(s.netMin);
+  const netMax5 = floorToFive(s.netMax);
+  if (netMin5 > netMax5) {
+    showMessage("淨重範圍內沒有可用的 5 kg 倍數，請調整淨重 Min／Max。");
+    return null;
+  }
   let clock = minutes(s.startTime);
   let dayOffset = 0;
   let index = 0;
   const lastUse = new Map();
-  const records = [];
+  const slots = [];
+  let tareSum = 0;
 
-  while (cumulativeGross < targetKg && index < 10000) {
+  // 先排出車次，直到目標重量落在「所有車皆符合淨重 range」的可行區間內。
+  while (index < 10000) {
     let chosen = null;
     let tries = 0;
 
@@ -223,32 +242,111 @@ function buildRecordPlan() {
       return null;
     }
 
-    const tare = s.tareHint > 0 ? s.tareHint : num(chosen.tareWeight);
-    let net = randomWeight(s.netMin, s.netMax);
-    let gross = tare + net;
-    const remaining = targetKg - cumulativeGross;
-
-    if (remaining < gross) {
-      const adjustedNet = remaining - tare;
-      if (adjustedNet >= s.netMin && adjustedNet <= s.netMax) {
-        net = adjustedNet;
-        gross = remaining;
-      }
+    const tareSource = s.tareHint > 0 ? s.tareHint : chosen.tareWeight;
+    const tare = num(tareSource);
+    if (tare <= 0) {
+      showMessage(`車號 ${chosen.vehicleNo} 的空車重不正確。`);
+      return null;
     }
 
     const absolute = dayOffset * 1440 + clock;
     lastUse.set(chosen.vehicleNo, absolute);
-    cumulativeGross += gross;
-    records.push({
-      id: uid(),
-      tripNo: index + 1,
+    slots.push({
+      chosen,
+      tare,
       date: addDays(s.date, dayOffset),
       departureTime: timeText(clock),
-      vehicleNo: chosen.vehicleNo,
+    });
+    tareSum += tare;
+    index++;
+
+    const minPossible = tareSum + index * netMin5;
+    const maxPossible = tareSum + index * netMax5;
+    const totalNetCandidate = targetKg - tareSum;
+    const isFiveAligned = totalNetCandidate % 5 === 0;
+
+    if (
+      targetKg >= minPossible &&
+      targetKg <= maxPossible &&
+      isFiveAligned
+    ) break;
+
+    // 最小可能重量已大於目標，增加車次只會更重，代表目前條件無解。
+    if (minPossible > targetKg) {
+      showMessage(
+        `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg（生成值以 5 kg 為單位）的設定範圍內，精準組成 ${ft(s.targetTons)} 公噸。請調整目標重量、淨重範圍或車輛空車重。`,
+      );
+      return null;
+    }
+
+    clock += s.interval;
+    if (clock >= 1440) {
+      dayOffset += Math.floor(clock / 1440);
+      clock %= 1440;
+    }
+  }
+
+  if (!slots.length || slots.length >= 10000) {
+    showMessage("生成筆數過多，請檢查重量設定。");
+    return null;
+  }
+
+  // 逐台分配淨重；每次都保留剩餘車次的可行空間，最後一台精準撿尾巴。
+  const totalNetNeeded = targetKg - tareSum;
+  let assignedNet = 0;
+  const netWeights = [];
+
+  for (let i = 0; i < slots.length; i++) {
+    const remainingCars = slots.length - i - 1;
+    const remainingNet = totalNetNeeded - assignedNet;
+    const minForCurrent = Math.max(
+      netMin5,
+      remainingNet - remainingCars * netMax5,
+    );
+    const maxForCurrent = Math.min(
+      netMax5,
+      remainingNet - remainingCars * netMin5,
+    );
+
+    if (minForCurrent > maxForCurrent) {
+      showMessage("目前條件無法產生全部落在設定 range 內的精準重量。");
+      return null;
+    }
+
+    const net =
+      remainingCars === 0
+        ? remainingNet
+        : randomFiveWeight(minForCurrent, maxForCurrent);
+
+    if (
+      net === null ||
+      net % 5 !== 0 ||
+      net < netMin5 ||
+      net > netMax5
+    ) {
+      showMessage("目前條件無法產生全部位於設定 range 且為 5 kg 倍數的精準淨重。");
+      return null;
+    }
+
+    netWeights.push(net);
+    assignedNet += net;
+  }
+
+  let cumulativeGross = 0;
+  const records = slots.map((slot, i) => {
+    const net = netWeights[i];
+    const gross = slot.tare + net;
+    cumulativeGross += gross;
+    return {
+      id: uid(),
+      tripNo: i + 1,
+      date: slot.date,
+      departureTime: slot.departureTime,
+      vehicleNo: slot.chosen.vehicleNo,
       driver: s.driver || "",
-      deliveryNo: nextDeliveryNo(s.deliveryNoStart, index),
+      deliveryNo: nextDeliveryNo(s.deliveryNoStart, i),
       documentType: s.documentType,
-      tareWeight: tare,
+      tareWeight: slot.tare,
       netWeight: net,
       grossWeight: gross,
       cumulativeTons: cumulativeGross / 1000,
@@ -270,15 +368,8 @@ function buildRecordPlan() {
         targetTons: s.targetTons,
         interval: s.interval,
       },
-    });
-
-    clock += s.interval;
-    if (clock >= 1440) {
-      dayOffset += Math.floor(clock / 1440);
-      clock %= 1440;
-    }
-    index++;
-  }
+    };
+  });
 
   const last = records.at(-1);
   const actualTons = last?.cumulativeTons || 0;
