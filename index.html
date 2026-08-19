@@ -14,7 +14,8 @@
     <label class="btn secondary file-btn">匯入車輛 Excel<input id="excelFile" type="file" accept=".xlsx,.xls,.csv" hidden /></label>
     <button id="exportVehiclesBtn" class="btn secondary">匯出車輛主檔</button>
     <label class="btn secondary file-btn">匯入交貨表單<input id="recordsExcelFile" type="file" accept=".xlsx,.xls,.csv" hidden /></label>
-    <button id="exportRecordsBtn" class="btn primary">匯出生成資料</button>
+    <button id="printerExportBtn" class="btn primary">下載（點陣機所需檔案）</button>
+    <button id="exportRecordsBtn" class="btn secondary">匯出生成資料</button>
   </div>
 </header>
 
@@ -27,7 +28,7 @@
   </section>
 
   <section class="panel form-panel">
-    <div class="panel-heading"><div><h2>二、自動生成條件</h2><span class="muted">累計數量以每筆總重量計算</span></div><button id="resetSettingsBtn" class="btn ghost">重設</button></div>
+    <div class="panel-heading"><div><h2>二、自動生成條件</h2><span class="muted">累計數量以每筆淨重計算</span></div><button id="resetSettingsBtn" class="btn ghost">重設</button></div>
     <form id="generatorForm" novalidate>
       <div class="condition-columns paper-order">
         <fieldset class="condition-column">
@@ -43,7 +44,7 @@
           <legend>單據與重量</legend>
           <label><span>交貨單號起始值 *</span><input id="deliveryNoStart" required value="" /></label>
           <label><span>進／出料單 *</span><select id="documentType"><option>進料單</option><option selected>出料單</option></select></label>
-          <label><span>目標累計總重量（公噸）*</span><input id="targetTons" type="number" min="0.001" step="0.001" value="" required /></label>
+          <label><span>目標累計淨重（公噸）*</span><input id="targetTons" type="number" min="0.001" step="0.001" value="" required /></label>
           <label><span>空車重（kg）</span><input id="tareHint" type="number" min="0" placeholder="由車輛主檔自動帶入" readonly/></label>
           <div class="range-pair">
             <label><span>淨重下限（kg）*</span><input id="netMin" type="number" min="1" value="30000" required /></label>
@@ -86,7 +87,7 @@
     <div class="table-wrap records-table-wrap"><table><thead><tr>
       <th>車次</th>
       <th>客戶名稱</th><th>送貨地點</th><th>承運公司</th><th>車號</th>
-      <th>交貨單號</th><th>進／出料單</th><th class="num">空車重</th><th class="num">淨重</th><th class="num">總重量</th><th class="num">累計總重（噸）</th><th>品名</th>
+      <th>交貨單號</th><th>進／出料單</th><th class="num">空車重</th><th class="num">淨重</th><th class="num">總重量</th><th class="num">累計淨重（噸）</th><th>品名</th>
       <th>日期</th><th>出廠時間</th>
       <th>冷油／大桶</th><th>冷油／小桶</th>
       <th>托運</th><th>調度</th><th>品管</th><th>監造</th><th>溫度</th><th>備註</th><th>操作</th>
