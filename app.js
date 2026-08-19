@@ -16,7 +16,13 @@ const state = {
   records: load(STORAGE.records, []),
 };
 const el = (id) => document.getElementById(id);
-const today = new Date().toISOString().slice(0, 10);
+function localDateText(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+const today = localDateText();
 function load(k, f) {
   try {
     return JSON.parse(localStorage.getItem(k)) || structuredClone(f);
@@ -76,9 +82,10 @@ function timeText(total) {
   );
 }
 function addDays(date, days) {
-  const d = new Date(date + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = String(date).split("-").map(Number);
+  const local = new Date(y, m - 1, d);
+  local.setDate(local.getDate() + days);
+  return localDateText(local);
 }
 function renderVehicleSelect() {
   const opts = state.vehicles
@@ -150,7 +157,7 @@ function validateSettings(s) {
     return "請填寫所有必填設定。";
   if (s.netMin <= 0 || s.netMax < s.netMin) return "淨重區間不正確。";
   if (s.targetTons <= 0 || s.intervalMin <= 0 || s.intervalMax <= 0)
-    return "目標累計總重量與間隔時間必須大於 0。";
+    return "目標累計淨重與間隔時間必須大於 0。";
   if (s.intervalMax < s.intervalMin)
     return "出廠間隔區間不正確，最大間隔不可小於最小間隔。";
   if (!selectedVehicles(s).length) return "請至少選擇一輛車。";
@@ -331,7 +338,7 @@ function buildRecordPlan() {
   let index = 0;
   const lastUse = new Map();
   const slots = [];
-  let tareSum = 0;
+  // 業主規則：目標累計淨重 = 每車「淨重」的累計，不包含空車重。
 
   // 先排出車次，直到目標重量落在「所有車皆符合淨重 range」的可行區間內。
   while (index < 10000) {
@@ -379,13 +386,11 @@ function buildRecordPlan() {
       date: addDays(s.date, dayOffset),
       departureTime: timeText(clock),
     });
-    tareSum += tare;
     index++;
 
-    const minPossible = tareSum + index * netMin5;
-    const maxPossible = tareSum + index * netMax5;
-    const totalNetCandidate = targetKg - tareSum;
-    const isFiveAligned = totalNetCandidate % 5 === 0;
+    const minPossible = index * netMin5;
+    const maxPossible = index * netMax5;
+    const isFiveAligned = targetKg % 5 === 0;
 
     if (
       targetKg >= minPossible &&
@@ -414,7 +419,7 @@ function buildRecordPlan() {
   }
 
   // 分配不重複淨重；每一筆為 5 kg 倍數，並保留尾車可行空間。
-  const totalNetNeeded = targetKg - tareSum;
+  const totalNetNeeded = targetKg;
   const calculatedNetWeights = buildUniqueNetWeights(
     slots.length,
     totalNetNeeded,
@@ -424,18 +429,18 @@ function buildRecordPlan() {
 
   if (!calculatedNetWeights) {
     showMessage(
-      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 5 kg 為單位、累計總重量精準吻合」。請放寬淨重範圍或調整目標重量。`,
+      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 5 kg 為單位、累計淨重精準吻合」。請放寬淨重範圍或調整目標重量。`,
     );
     return null;
   }
 
   const netWeights = arrangeNaturalNetWeights(calculatedNetWeights);
 
-  let cumulativeGross = 0;
+  let cumulativeNet = 0;
   const records = slots.map((slot, i) => {
     const net = netWeights[i];
     const gross = slot.tare + net;
-    cumulativeGross += gross;
+    cumulativeNet += net;
     return {
       id: uid(),
       tripNo: i + 1,
@@ -448,7 +453,7 @@ function buildRecordPlan() {
       tareWeight: slot.tare,
       netWeight: net,
       grossWeight: gross,
-      cumulativeTons: cumulativeGross / 1000,
+      cumulativeTons: cumulativeNet / 1000,
       customer: s.customer,
       location: s.location,
       productName: s.productName,
@@ -494,14 +499,14 @@ function previewAndConfirmGenerate() {
   const previewText =
     `試算結果：\n\n` +
     `預計產生：${plan.records.length} 車\n` +
-    `累計總重量：${ft(plan.actualTons)} 公噸\n` +
+    `累計淨重：${ft(plan.actualTons)} 公噸\n` +
     `目標重量：${ft(plan.targetTons)} 公噸` +
     `${overText}\n` +
     `結束時間：${plan.endDate} ${plan.endTime}\n\n` +
     `確認後將一鍵生成以上資料，是否繼續？`;
 
   showMessage(
-    `試算結果：預計產生 ${plan.records.length} 車，累計總重量 ${ft(plan.actualTons)} 公噸${plan.overTons > 0 ? `，超過目標 ${ft(plan.overTons)} 公噸` : ""}，結束時間 ${plan.endDate} ${plan.endTime}。`,
+    `試算結果：預計產生 ${plan.records.length} 車，累計淨重 ${ft(plan.actualTons)} 公噸${plan.overTons > 0 ? `，超過目標 ${ft(plan.overTons)} 公噸` : ""}，結束時間 ${plan.endDate} ${plan.endTime}。`,
   );
 
   if (!confirm(previewText)) return;
@@ -523,7 +528,7 @@ function recalc() {
   state.records.forEach((r, i) => {
     r.tripNo = i + 1;
     r.grossWeight = num(r.tareWeight) + num(r.netWeight);
-    total += r.grossWeight;
+    total += num(r.netWeight);
     r.cumulativeTons = total / 1000;
   });
 }
@@ -537,12 +542,11 @@ function recordWarnings(candidate, id = "") {
   const projected =
     state.records
       .filter((x) => x.id !== id)
-      .reduce((sum, x) => sum + num(x.tareWeight) + num(x.netWeight), 0) +
-    candidate.tareWeight +
+      .reduce((sum, x) => sum + num(x.netWeight), 0) +
     candidate.netWeight;
   if (projected > s.targetTons * 1000)
     warnings.push(
-      `儲存後累計總重量為 ${ft(projected / 1000)} 公噸，超過目標 ${ft(s.targetTons)} 公噸`,
+      `儲存後累計淨重為 ${ft(projected / 1000)} 公噸，超過目標 ${ft(s.targetTons)} 公噸`,
     );
   if (s.vehicleMode === "single" && candidate.vehicleNo !== s.singleVehicleNo)
     warnings.push(`車號與目前指定車號 ${s.singleVehicleNo} 不同`);
@@ -550,11 +554,11 @@ function recordWarnings(candidate, id = "") {
 }
 function renderRecords() {
   recalc();
-  const total = state.records.reduce((s, r) => s + num(r.grossWeight), 0),
+  const total = state.records.reduce((s, r) => s + num(r.netWeight), 0),
     target = settings().targetTons;
   const over = target > 0 && total / 1000 > target;
   el("recordSummary").textContent =
-    `${state.records.length} 筆・累計總重量 ${ft(total / 1000)} 公噸${over ? `（超過目標 ${ft(total / 1000 - target)} 噸）` : ""}`;
+    `${state.records.length} 筆・累計淨重 ${ft(total / 1000)} 公噸${over ? `（超過目標 ${ft(total / 1000 - target)} 噸）` : ""}`;
   el("recordTbody").innerHTML = state.records.length
     ? state.records
         .map(
@@ -828,7 +832,7 @@ function parseRecordRows(rows) {
         grossWeight:
           num(pick(row, [/^總重量$/, /^總重$/, /gross/i])) ||
           tareWeight + netWeight,
-        cumulativeTons: num(pick(row, [/累計總重量/, /累計總重/])),
+        cumulativeTons: num(pick(row, [/累計淨重/, /累計總重/])),
         productName: String(pick(row, [/^品名$/]) || "").trim(),
         documentType: String(
           pick(row, [/單據類型/, /進.*出料單/]) || "出料單",
@@ -908,7 +912,7 @@ function exportRecords() {
       空車重: r.tareWeight,
       淨重: r.netWeight,
       總重量: r.grossWeight,
-      累計總重量: r.cumulativeTons,
+      累計淨重: r.cumulativeTons,
       品名: r.productName,
       日期: r.date,
       出廠時間: r.departureTime,
