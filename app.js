@@ -1072,7 +1072,9 @@ function fillPrinterSheetXml(templateXml, r) {
   const doc = parseXml(templateXml);
   cropTemplateSheet(doc);
 
-  setOoxmlCell(doc, "N1", `NO:${r.deliveryNo || ""}`);
+  setOoxmlRichTextCell(doc, "N1", [
+  { text: `NO:${r.deliveryNo || ""}`, font: "Arial", size: 16 },
+  ]);
   setOoxmlRichTextCell(doc, "E3", [
     { text: "新兆豐", font: "新細明體", size: 16 },
     { text: "(2006)", font: "Arial", size: 16.5 },
