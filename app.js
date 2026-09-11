@@ -44,7 +44,7 @@ function fi(v) {
 function ft(v) {
   return Number(v || 0).toLocaleString("zh-TW", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 3,
+    maximumFractionDigits: 2,
   });
 }
 function esc(v = "") {
