@@ -1017,6 +1017,36 @@ function setOoxmlCell(doc, address, value, numeric = false) {
   }
 }
 
+function setOoxmlRichTextCell(doc, address, runs) {
+  const cells = [...doc.getElementsByTagNameNS(OOXML_NS, "c")];
+  const cell = cells.find((c) => c.getAttribute("r") === address);
+  if (!cell) throw new Error(`原始模板找不到儲存格 ${address}`);
+
+  childElementsByLocalName(cell, "f").forEach((n) => n.remove());
+  childElementsByLocalName(cell, "v").forEach((n) => n.remove());
+  childElementsByLocalName(cell, "is").forEach((n) => n.remove());
+
+  cell.setAttribute("t", "inlineStr");
+  const is = doc.createElementNS(OOXML_NS, "is");
+  runs.forEach(({ text, font, size }) => {
+    const r = doc.createElementNS(OOXML_NS, "r");
+    const rPr = doc.createElementNS(OOXML_NS, "rPr");
+    const rFont = doc.createElementNS(OOXML_NS, "rFont");
+    rFont.setAttribute("val", font);
+    const sz = doc.createElementNS(OOXML_NS, "sz");
+    sz.setAttribute("val", String(size));
+    rPr.appendChild(rFont);
+    rPr.appendChild(sz);
+    r.appendChild(rPr);
+    const t = doc.createElementNS(OOXML_NS, "t");
+    t.setAttribute("xml:space", "preserve");
+    t.textContent = String(text ?? "");
+    r.appendChild(t);
+    is.appendChild(r);
+  });
+  cell.appendChild(is);
+}
+
 function cropTemplateSheet(doc) {
   // 只保留業主真正要列印的 A:S、1:12；清掉右側資料庫及下方資料。
   [...doc.getElementsByTagNameNS(OOXML_NS, "row")].forEach((row) => {
@@ -1043,7 +1073,10 @@ function fillPrinterSheetXml(templateXml, r) {
   cropTemplateSheet(doc);
 
   setOoxmlCell(doc, "N1", `NO:${r.deliveryNo || ""}`);
-  setOoxmlCell(doc, "E3", r.customer || "");
+  setOoxmlRichTextCell(doc, "E3", [
+    { text: "新兆豐", font: "新細明體", size: 16 },
+    { text: "(2006)", font: "Arial", size: 16.5 },
+  ]);
   setOoxmlCell(doc, "L3", num(r.grossWeight), true);
   setOoxmlCell(doc, "E4", r.location || "");
   setOoxmlCell(doc, "L4", num(r.tareWeight), true);
