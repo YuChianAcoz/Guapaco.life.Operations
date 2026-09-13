@@ -17,6 +17,7 @@
     <label class="btn secondary file-btn">匯入交貨表單<input id="recordsExcelFile" type="file" accept=".xlsx,.xls,.csv" hidden /></label>
     <button id="exportRecordsBtn" class="btn secondary">匯出生成資料</button>
   <button id="printerExportBtn" class="btn primary">下載【新兆豐】資料</button>
+    <button id="taishoPrinterExportBtn" class="btn primary">下載【大正】資料</button>
   </div>
 </header>
 
@@ -34,7 +35,7 @@
       <div class="condition-columns paper-order">
         <fieldset class="condition-column">
           <legend>基本資料</legend>
-          <label><span>客戶名稱 *</span><input id="customer" required value="新兆豐(2006)" readonly /></label>
+          <label><span>客戶名稱 *</span><input id="customer" required value="新兆豐(2006)" list="customerOptions" /></label>
           <label><span>送貨地點 *</span><input id="location" required value="" /></label>
           <label><span>承運公司</span><input id="driver" /></label>
           <label><span>車號</span><select id="vehicleMode"><option value="enabled">依啟用車輛輪排</option><option value="single">指定單一車號</option></select></label>
@@ -96,12 +97,17 @@
   </section>
 </main>
 
+<datalist id="customerOptions">
+  <option value="新兆豐(2006)"></option>
+  <option value="新兆豐營造"></option>
+</datalist>
+
 <dialog id="vehicleDialog"><form id="vehicleForm" method="dialog"><input type="hidden" id="vehicleEditIndex" /><h3 id="vehicleDialogTitle">新增車輛</h3><label><span>車號</span><input id="vehicleDialogNo" required /></label><label><span>空車重（kg）</span><input id="vehicleDialogTare" type="number" min="0" required /></label><div class="dialog-actions"><button type="button" id="cancelVehicleBtn" class="btn ghost">取消</button><button type="submit" class="btn primary">儲存</button></div></form></dialog>
 
 <dialog id="recordDialog"><form id="recordForm" method="dialog"><input type="hidden" id="recordEditId" /><h3 id="recordDialogTitle">編輯生成資料</h3><div id="recordWarning" class="edit-warning" hidden></div>
 <div class="dialog-grid record-dialog-grid">
   <fieldset class="dialog-section"><legend>基本資料</legend>
-    <label><span>客戶名稱 *</span><input id="rdCustomer" required value="新兆豐(2006)" readonly /></label>
+    <label><span>客戶名稱 *</span><input id="rdCustomer" required value="新兆豐(2006)" list="customerOptions" /></label>
     <label><span>送貨地點 *</span><input id="rdLocation" required /></label>
     <label><span>承運公司</span><input id="rdDriver" /></label>
     <label><span>車號 *</span><input id="rdVehicleNo" required /></label>
@@ -129,5 +135,8 @@
     <label class="dialog-span-2"><span>備註</span><textarea id="rdNote" rows="3"></textarea></label>
   </fieldset>
 </div><div class="dialog-actions"><button type="button" id="cancelRecordBtn" class="btn ghost">取消</button><button type="submit" class="btn primary">儲存並重算</button></div></form></dialog>
-<div id="toast" class="toast" hidden></div><script src="app.js"></script>
+<div id="toast" class="toast" hidden></div>
+<script src="printer-config.js"></script>
+<script src="printer-taisho.js"></script>
+<script src="app.js"></script>
 </body></html>

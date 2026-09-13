@@ -1072,13 +1072,21 @@ function fillPrinterSheetXml(templateXml, r) {
   const doc = parseXml(templateXml);
   cropTemplateSheet(doc);
 
-  setOoxmlRichTextCell(doc, "N1", [
-  { text: `NO:${r.deliveryNo || ""}`, font: "Arial", size: 16 },
+  const xzf = PRINTER_CONFIG.xinzhaofeng;
+  setOoxmlRichTextCell(doc, xzf.deliveryNo.cell, [
+    { text: `NO:${r.deliveryNo || ""}`, font: xzf.deliveryNo.font, size: xzf.deliveryNo.size },
   ]);
-  setOoxmlRichTextCell(doc, "E3", [
-    { text: "新兆豐", font: "新細明體", size: 16 },
-    { text: "(2006)", font: "Arial", size: 16.5 },
-  ]);
+  const customerText = String(r.customer || "新兆豐(2006)").trim();
+  if (customerText === "新兆豐(2006)") {
+    setOoxmlRichTextCell(doc, xzf.customer.cell, [
+      { text: "新兆豐", font: xzf.customer.font, size: xzf.customer.size },
+      { text: "(2006)", font: xzf.customerCode.font, size: xzf.customerCode.size },
+    ]);
+  } else {
+    setOoxmlRichTextCell(doc, xzf.customer.cell, [
+      { text: customerText, font: xzf.customer.font, size: xzf.customer.size },
+    ]);
+  }
   setOoxmlCell(doc, "L3", num(r.grossWeight), true);
   setOoxmlCell(doc, "E4", r.location || "");
   setOoxmlCell(doc, "L4", num(r.tareWeight), true);
@@ -1325,6 +1333,7 @@ el("recordsExcelFile").onchange = async (e) => {
 };
 el("exportVehiclesBtn").onclick = exportVehicles;
 el("printerExportBtn").onclick = exportPrinterWorkbook;
+el("taishoPrinterExportBtn").onclick = exportTaishoWorkbook;
 el("exportRecordsBtn").onclick = exportRecords;
 el("addRecordBtn").onclick = () => openRecord();
 el("recordForm").onsubmit = saveRecord;
