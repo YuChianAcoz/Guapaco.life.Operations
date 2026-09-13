@@ -1263,7 +1263,7 @@ async function exportPrinterWorkbook() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `點陣機料單_${batchDate}.xlsx`;
+    a.download = `新兆豐點陣機料單_${batchDate}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
