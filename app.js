@@ -448,7 +448,7 @@ function buildRecordPlan() {
       departureTime: slot.departureTime,
       vehicleNo: slot.chosen.vehicleNo,
       driver: s.driver || "",
-      deliveryNo: nextDeliveryNo(s.deliveryNoStart, i),
+      deliveryNo: s.customer === "新兆豐營造" ? s.deliveryNoStart : nextDeliveryNo(s.deliveryNoStart, i),
       documentType: s.documentType,
       tareWeight: slot.tare,
       netWeight: net,
