@@ -57,8 +57,10 @@ function fillTaishoSheetXml(templateXml, r) {
 
   taishoSetRich(doc, c.customer, r.customer || "", f.customerLocation);
   taishoSetRich(doc, c.location, r.location || "", f.customerLocation);
-  taishoSetRich(doc, c.driver, r.driver ? `(${r.driver})` : "", f.driver);
-  taishoSetRich(doc, c.departureTime, r.departureTime || "", f.departureTime);
+  // 廠商新版原始模板在「司機」與「出廠時間」字首都保留 1 個半形空格。
+  // 必須保留此前置空格，才能與調度員／車號的左緣對齊。
+  taishoSetRich(doc, c.driver, r.driver ? ` (${r.driver})` : "", f.driver);
+  taishoSetRich(doc, c.departureTime, r.departureTime ? ` ${r.departureTime}` : "", f.departureTime);
 
   // 注意：累計重量、調度員、車號、總重、空重、淨重是模板內的文字方塊，
   // 不能再寫進工作表儲存格，否則會和原文字方塊重疊。
