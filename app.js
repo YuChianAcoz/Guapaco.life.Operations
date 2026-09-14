@@ -1,39 +1,3 @@
-"use strict";
-const STORAGE = {
-  vehicles: "deliveryV3.vehicles",
-  records: "deliveryV3.records",
-};
-const defaults = [
-  ["KLM-0817", 16200],
-  ["KEJ-6876", 15100],
-  ["KLR-6699", 17010],
-  ["KEJ-3179", 16400],
-  ["KLK-6513", 16000],
-  ["KLJ-3031", 16600],
-].map(([vehicleNo, tareWeight]) => ({ vehicleNo, tareWeight, enabled: true }));
-const state = {
-  vehicles: load(STORAGE.vehicles, defaults),
-  records: load(STORAGE.records, []),
-};
-const el = (id) => document.getElementById(id);
-function localDateText(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-const today = localDateText();
-function load(k, f) {
-  try {
-    return JSON.parse(localStorage.getItem(k)) || structuredClone(f);
-  } catch {
-    return structuredClone(f);
-  }
-}
-function save() {
-  localStorage.setItem(STORAGE.vehicles, JSON.stringify(state.vehicles));
-  localStorage.setItem(STORAGE.records, JSON.stringify(state.records));
-}
 function num(v) {
   const n = Number(String(v ?? "").replace(/,/g, ""));
   return Number.isFinite(n) ? n : 0;
