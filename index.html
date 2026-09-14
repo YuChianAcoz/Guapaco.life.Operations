@@ -16,7 +16,7 @@
     <button id="exportVehiclesBtn" class="btn secondary">匯出車輛主檔</button>
     <label class="btn secondary file-btn">匯入交貨表單<input id="recordsExcelFile" type="file" accept=".xlsx,.xls,.csv" hidden /></label>
     <button id="exportRecordsBtn" class="btn secondary">匯出生成資料</button>
-  <button id="printerExportBtn" class="btn primary">下載【新兆豐】資料</button>
+  <button id="printerExportBtn" class="btn primary">下載【詮盛】資料</button>
     <button id="taishoPrinterExportBtn" class="btn primary">下載【大正】資料</button>
   </div>
 </header>
@@ -43,8 +43,8 @@
     <option value="新兆豐營造">新兆豐營造</option>
   </select>
 </label>
-          <label><span>送貨地點 *</span><input id="location" required value="" /></label>
-          <label><span>承運公司</span><input id="driver" /></label>
+          <label><span>送貨/交貨地點 *</span><input id="location" required value="" /></label>
+          <label><span>承運公司/司機</span><input id="driver" /></label>
           <label><span>車號</span><select id="vehicleMode"><option value="enabled">依啟用車輛輪排</option><option value="single">指定單一車號</option></select></label>
           <label id="singleVehicleWrap" hidden><span>指定車號</span><select id="singleVehicleNo"></select></label>
         </fieldset>
@@ -95,7 +95,7 @@
     <div class="panel-heading records-heading"><div><h2>三、生成結果</h2><span id="recordSummary" class="muted"></span></div><div class="filter-actions"><button id="addRecordBtn" class="btn ghost">＋ 新增一筆</button><button id="clearRecordsBtn" class="btn danger-ghost">清除全部</button></div></div>
     <div class="table-wrap records-table-wrap"><table><thead><tr>
       <th>車次</th>
-      <th>客戶名稱</th><th>送貨地點</th><th>承運公司</th><th>車號</th>
+      <th>客戶名稱</th><th>送貨/交貨地點</th><th>承運公司/司機</th><th>車號</th>
       <th>交貨單號</th><th>進／出料單</th><th class="num">空車重</th><th class="num">淨重</th><th class="num">總重量</th><th class="num">累計淨重（噸）</th><th>品名</th>
       <th>日期</th><th>出廠時間</th>
       <th>冷油／大桶</th><th>冷油／小桶</th>
@@ -119,8 +119,8 @@
     <option value="新兆豐營造">新兆豐營造</option>
   </select>
 </label>
-    <label><span>送貨地點 *</span><input id="rdLocation" required /></label>
-    <label><span>承運公司</span><input id="rdDriver" /></label>
+    <label><span>送貨/交貨地點 *</span><input id="rdLocation" required /></label>
+    <label><span>承運公司/司機</span><input id="rdDriver" /></label>
     <label><span>車號 *</span><input id="rdVehicleNo" required /></label>
   </fieldset>
   <fieldset class="dialog-section"><legend>單據與重量</legend>
