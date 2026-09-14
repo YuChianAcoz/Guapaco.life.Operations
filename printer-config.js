@@ -50,6 +50,6 @@ const PRINTER_CONFIG = {
       departureTime: { font: "Meiryo", size: 13 },
       rightValues: { font: "Meiryo", size: 14 },
     },
-    printArea: "A1:AN16",
+    printArea: "A2:AQ19",
   },
 };
