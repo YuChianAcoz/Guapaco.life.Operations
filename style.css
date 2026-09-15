@@ -216,3 +216,6 @@ select { width:100%; border:1px solid #cfd9de; border-radius:9px; padding:9px 10
 .dialog-section label{display:flex;flex-direction:column;gap:6px}
 .dialog-section label>span{font-size:13px;color:#52636d;font-weight:650}
 @media(max-width:800px){.record-dialog-grid{grid-template-columns:1fr}.dialog-section{grid-template-columns:1fr}.dialog-span-2{grid-column:auto}}
+
+.vehicle-bulk-actions{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.vehicle-bulk-actions .btn{padding:7px 12px}

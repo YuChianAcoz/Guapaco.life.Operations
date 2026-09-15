@@ -135,6 +135,8 @@ function settings() {
     oilSmall: el("oilSmall").value.trim(),
     productName: el("productName").value.trim(),
     targetTons: num(el("targetTons").value),
+    currentCumulativeTons: num(el("currentCumulativeTons").value),
+    tripNoStart: Math.max(1, Math.floor(num(el("tripNoStart").value) || 1)),
     tareHint: num(el("tareHint").value),
     netMin: num(el("netMin").value),
     netMax: num(el("netMax").value),
@@ -156,6 +158,8 @@ function validateSettings(s) {
   )
     return "請填寫所有必填設定。";
   if (s.netMin <= 0 || s.netMax < s.netMin) return "淨重區間不正確。";
+  if (s.currentCumulativeTons < 0) return "目前累計重量不可小於 0。";
+  if (s.currentCumulativeTons >= s.targetTons) return "目前累計重量必須小於目標累計淨重。";
   if (s.targetTons <= 0 || s.intervalMin <= 0 || s.intervalMax <= 0)
     return "目標累計淨重與間隔時間必須大於 0。";
   if (s.intervalMax < s.intervalMin)
@@ -327,6 +331,8 @@ function buildRecordPlan() {
 
   const vehicles = selectedVehicles(s);
   const targetKg = Math.round(s.targetTons * 1000);
+  const currentCumulativeKg = Math.round(s.currentCumulativeTons * 1000);
+  const batchTargetKg = targetKg - currentCumulativeKg;
   const netMin5 = ceilToFive(s.netMin);
   const netMax5 = floorToFive(s.netMax);
   if (netMin5 > netMax5) {
@@ -393,13 +399,13 @@ function buildRecordPlan() {
     const isFiveAligned = targetKg % 5 === 0;
 
     if (
-      targetKg >= minPossible &&
-      targetKg <= maxPossible &&
+      batchTargetKg >= minPossible &&
+      batchTargetKg <= maxPossible &&
       isFiveAligned
     ) break;
 
     // 最小可能重量已大於目標，增加車次只會更重，代表目前條件無解。
-    if (minPossible > targetKg) {
+    if (minPossible > batchTargetKg) {
       showMessage(
         `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg（生成值以 5 kg 為單位）的設定範圍內，精準組成 ${ft(s.targetTons)} 公噸。請調整目標重量、淨重範圍或車輛空車重。`,
       );
@@ -419,7 +425,7 @@ function buildRecordPlan() {
   }
 
   // 分配不重複淨重；每一筆為 5 kg 倍數，並保留尾車可行空間。
-  const totalNetNeeded = targetKg;
+  const totalNetNeeded = batchTargetKg;
   const calculatedNetWeights = buildUniqueNetWeights(
     slots.length,
     totalNetNeeded,
@@ -436,14 +442,14 @@ function buildRecordPlan() {
 
   const netWeights = arrangeNaturalNetWeights(calculatedNetWeights);
 
-  let cumulativeNet = 0;
+  let cumulativeNet = currentCumulativeKg;
   const records = slots.map((slot, i) => {
     const net = netWeights[i];
     const gross = slot.tare + net;
     cumulativeNet += net;
     return {
       id: uid(),
-      tripNo: i + 1,
+      tripNo: s.tripNoStart + i,
       date: slot.date,
       departureTime: slot.departureTime,
       vehicleNo: slot.chosen.vehicleNo,
@@ -470,6 +476,8 @@ function buildRecordPlan() {
         netMin: s.netMin,
         netMax: s.netMax,
         targetTons: s.targetTons,
+        currentCumulativeTons: s.currentCumulativeTons,
+        tripNoStart: s.tripNoStart,
         intervalMin: s.intervalMin,
         intervalMax: s.intervalMax,
       },
@@ -524,9 +532,11 @@ function recalc() {
       a.date.localeCompare(b.date) ||
       a.departureTime.localeCompare(b.departureTime),
   );
-  let total = 0;
+  const firstSnapshot = state.records[0]?.conditionSnapshot || {};
+  let total = Math.round(num(firstSnapshot.currentCumulativeTons) * 1000);
+  const startTrip = Math.max(1, Math.floor(num(firstSnapshot.tripNoStart) || num(state.records[0]?.tripNo) || 1));
   state.records.forEach((r, i) => {
-    r.tripNo = i + 1;
+    r.tripNo = startTrip + i;
     r.grossWeight = num(r.tareWeight) + num(r.netWeight);
     total += num(r.netWeight);
     r.cumulativeTons = total / 1000;
@@ -1309,7 +1319,7 @@ el("generatorForm").addEventListener("submit", (e) => {
   e.preventDefault();
   previewAndConfirmGenerate();
 });
-["netMin", "netMax", "targetTons", "intervalMin", "intervalMax", "tareHint"].forEach(
+["netMin", "netMax", "targetTons", "currentCumulativeTons", "tripNoStart", "intervalMin", "intervalMax", "tareHint"].forEach(
   (id) => el(id).addEventListener("input", updateEstimate),
 );
 el("vehicleMode").addEventListener("change", () => {
@@ -1319,6 +1329,15 @@ el("vehicleMode").addEventListener("change", () => {
 el("singleVehicleNo").addEventListener("change", updateEstimate);
 el("rdTare").addEventListener("input", setGrossPreview);
 el("rdNet").addEventListener("input", setGrossPreview);
+
+el("selectAllVehiclesBtn").onclick = () => {
+  state.vehicles.forEach((v) => { v.enabled = true; });
+  save(); renderVehicles();
+};
+el("deselectAllVehiclesBtn").onclick = () => {
+  state.vehicles.forEach((v) => { v.enabled = false; });
+  save(); renderVehicles();
+};
 el("addVehicleBtn").onclick = () => openVehicle();
 el("vehicleForm").onsubmit = saveVehicle;
 el("cancelVehicleBtn").onclick = () => el("vehicleDialog").close();

@@ -24,7 +24,7 @@
 <main class="app-shell">
   <section class="panel vehicle-panel">
     <div class="panel-heading"><div><h2>一、車輛主檔</h2><span id="vehicleCount" class="muted"></span></div><button id="addVehicleBtn" class="icon-btn">＋</button></div>
-    <div class="search-wrap"><input id="vehicleSearch" type="search" placeholder="搜尋車號…" /></div>
+    <div class="search-wrap"><input id="vehicleSearch" type="search" placeholder="搜尋車號…" /><div class="vehicle-bulk-actions"><button id="selectAllVehiclesBtn" type="button" class="btn ghost">全選</button><button id="deselectAllVehiclesBtn" type="button" class="btn ghost">全取消</button></div></div>
     <div class="table-wrap vehicle-table-wrap"><table><thead><tr><th>啟用</th><th>車號</th><th class="num">空車重（kg）</th><th>操作</th></tr></thead><tbody id="vehicleTbody"></tbody></table></div>
     <p class="helper">勾選要參與自動排程的車輛；同一車號再次出廠必須間隔至少 120 分鐘。</p>
   </section>
@@ -54,6 +54,10 @@
           <label><span>交貨單號起始值 *</span><input id="deliveryNoStart" required value="" /></label>
           <label><span>進／出料單 *</span><select id="documentType"><option>進料單</option><option selected>出料單</option></select></label>
           <label><span>目標累計淨重（公噸）*</span><input id="targetTons" type="number" min="0.001" step="0.001" value="" required /></label>
+          <div class="range-pair">
+            <label><span>目前累計重量（公噸）</span><input id="currentCumulativeTons" type="number" min="0" step="0.001" value="" placeholder="未填則從 0 開始" /></label>
+            <label><span>車次輸入</span><input id="tripNoStart" type="number" min="1" step="1" value="" placeholder="未填則從 1 開始" /></label>
+          </div>
           <label><span>空車重（kg）</span><input id="tareHint" type="number" min="0" placeholder="由車輛主檔自動帶入" readonly/></label>
           <div class="range-pair">
             <label><span>淨重下限（kg）*</span><input id="netMin" type="number" min="1" value="30000" required /></label>
