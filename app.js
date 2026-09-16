@@ -261,10 +261,27 @@ function buildUniqueNetWeights(count, total, min, max) {
 
     const candidates = [];
     for (let value = low; value <= high; value++) {
-      if (!used.has(value)) candidates.push(value);
-    }
+     if (!used.has(value)) {
+    candidates.push(value);
+  }
+}
 
-    for (const value of shuffleLocal(candidates)) {
+// 先隨機，再把「不是 5 的倍數」排在前面。
+// 例如 30487、30512、30469 會優先於 30485、30500。
+const randomizedCandidates = shuffleLocal(candidates);
+
+randomizedCandidates.sort((a, b) => {
+  const aIsFive = a % 5 === 0;
+  const bIsFive = b % 5 === 0;
+
+  if (aIsFive !== bIsFive) {
+    return aIsFive ? 1 : -1;
+  }
+
+  return 0;
+});
+
+    for (const value of randomizedCandidates) {
       // 每台淨重都不同；相鄰車次盡量至少差 10 kg，讓數字看起來更自然。
       if (result.length && Math.abs(result[result.length - 1] - value) < 10) continue;
       used.add(value);
