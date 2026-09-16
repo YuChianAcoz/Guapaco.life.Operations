@@ -47,6 +47,13 @@ function ft(v) {
     maximumFractionDigits: 2,
   });
 }
+
+function fc(v) {
+  return Number(v || 0).toLocaleString("zh-TW", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+}
 function esc(v = "") {
   return String(v).replace(
     /[&<>'"]/g,
@@ -193,46 +200,30 @@ function nextDeliveryNo(base, index) {
   if (!m) return `${base}-${String(index + 1).padStart(3, "0")}`;
   return m[1] + String(Number(m[2]) + index).padStart(m[2].length, "0");
 }
-function ceilToFive(value) {
-  return Math.ceil(num(value) / 5) * 5;
-}
-function floorToFive(value) {
-  return Math.floor(num(value) / 5) * 5;
-}
-function randomFiveWeight(min, max) {
-  const low = ceilToFive(min);
-  const high = floorToFive(max);
-  if (low > high) return null;
-  const steps = Math.floor((high - low) / 5);
-  return low + Math.floor(Math.random() * (steps + 1)) * 5;
-}
-
-function shuffled(values) {
-  const copy = [...values];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 function buildUniqueNetWeights(count, total, min, max) {
   if (count <= 0) return null;
-  const availableCount = Math.floor((max - min) / 5) + 1;
-  if (availableCount < count || total % 5 !== 0) return null;
+  min = Math.ceil(num(min));
+  max = Math.floor(num(max));
+  total = Math.round(num(total));
+  if (min > max || max - min + 1 < count) return null;
 
   const result = [];
   const used = new Set();
 
-  function boundsForRemaining(remainingCount, excluded) {
-    const available = [];
-    for (let value = min; value <= max; value += 5) {
-      if (!excluded.has(value)) available.push(value);
+  function availableBounds(remainingCount, excluded) {
+    const lows = [];
+    const highs = [];
+    for (let value = min; value <= max && lows.length < remainingCount; value++) {
+      if (!excluded.has(value)) lows.push(value);
     }
-    if (available.length < remainingCount) return null;
-    const minSum = available.slice(0, remainingCount).reduce((a, b) => a + b, 0);
-    const maxSum = available.slice(-remainingCount).reduce((a, b) => a + b, 0);
-    return { minSum, maxSum };
+    for (let value = max; value >= min && highs.length < remainingCount; value--) {
+      if (!excluded.has(value)) highs.push(value);
+    }
+    if (lows.length < remainingCount || highs.length < remainingCount) return null;
+    return {
+      minSum: lows.reduce((a, b) => a + b, 0),
+      maxSum: highs.reduce((a, b) => a + b, 0),
+    };
   }
 
   function search(index, remainingTotal) {
@@ -240,35 +231,42 @@ function buildUniqueNetWeights(count, total, min, max) {
     if (remainingCount === 0) return remainingTotal === 0;
 
     if (remainingCount === 1) {
-      if (
-        remainingTotal >= min &&
-        remainingTotal <= max &&
-        remainingTotal % 5 === 0 &&
-        !used.has(remainingTotal)
-      ) {
+      if (remainingTotal >= min && remainingTotal <= max && !used.has(remainingTotal)) {
         result.push(remainingTotal);
         return true;
       }
       return false;
     }
 
-    let low = Math.max(min, remainingTotal - (remainingCount - 1) * max);
-    let high = Math.min(max, remainingTotal - (remainingCount - 1) * min);
-    low = ceilToFive(low);
-    high = floorToFive(high);
+    const low = Math.max(min, remainingTotal - (remainingCount - 1) * max);
+    const high = Math.min(max, remainingTotal - (remainingCount - 1) * min);
     if (low > high) return false;
 
     const candidates = [];
-    for (let value = low; value <= high; value += 5) {
+    for (let value = low; value <= high; value++) {
       if (!used.has(value)) candidates.push(value);
     }
 
     for (const value of shuffled(candidates)) {
-      // 相鄰車次至少差 10 kg，避免視覺上過度規律或幾乎相同。
+      // 每台淨重都不同；相鄰車次盡量至少差 10 kg，讓數字看起來更自然。
       if (result.length && Math.abs(result[result.length - 1] - value) < 10) continue;
       used.add(value);
-      const bounds = boundsForRemaining(remainingCount - 1, used);
       const nextTotal = remainingTotal - value;
+      const bounds = availableBounds(remainingCount - 1, used);
+      if (bounds && nextTotal >= bounds.minSum && nextTotal <= bounds.maxSum) {
+        result.push(value);
+        if (search(index + 1, nextTotal)) return true;
+        result.pop();
+      }
+      used.delete(value);
+    }
+
+    // 若範圍很窄，放寬相鄰差距，但仍嚴格維持「每台不同」。
+    for (const value of shuffled(candidates)) {
+      if (used.has(value)) continue;
+      used.add(value);
+      const nextTotal = remainingTotal - value;
+      const bounds = availableBounds(remainingCount - 1, used);
       if (bounds && nextTotal >= bounds.minSum && nextTotal <= bounds.maxSum) {
         result.push(value);
         if (search(index + 1, nextTotal)) return true;
@@ -281,7 +279,6 @@ function buildUniqueNetWeights(count, total, min, max) {
 
   return search(0, total) ? result : null;
 }
-
 
 function arrangeNaturalNetWeights(weights) {
   if (!Array.isArray(weights) || weights.length < 2) return weights;
@@ -333,10 +330,10 @@ function buildRecordPlan() {
   const targetKg = Math.round(s.targetTons * 1000);
   const currentCumulativeKg = Math.round(s.currentCumulativeTons * 1000);
   const batchTargetKg = targetKg - currentCumulativeKg;
-  const netMin5 = ceilToFive(s.netMin);
-  const netMax5 = floorToFive(s.netMax);
-  if (netMin5 > netMax5) {
-    showMessage("淨重範圍內沒有可用的 5 kg 倍數，請調整淨重 Min／Max。");
+  const netMinKg = Math.ceil(s.netMin);
+  const netMaxKg = Math.floor(s.netMax);
+  if (netMinKg > netMaxKg) {
+    showMessage("淨重範圍內沒有可用的整數公斤數，請調整淨重 Min／Max。");
     return null;
   }
   let clock = minutes(s.startTime);
@@ -394,20 +391,15 @@ function buildRecordPlan() {
     });
     index++;
 
-    const minPossible = index * netMin5;
-    const maxPossible = index * netMax5;
-    const isFiveAligned = targetKg % 5 === 0;
+    const minPossible = index * netMinKg;
+    const maxPossible = index * netMaxKg;
 
-    if (
-      batchTargetKg >= minPossible &&
-      batchTargetKg <= maxPossible &&
-      isFiveAligned
-    ) break;
+    if (batchTargetKg >= minPossible && batchTargetKg <= maxPossible) break;
 
     // 最小可能重量已大於目標，增加車次只會更重，代表目前條件無解。
     if (minPossible > batchTargetKg) {
       showMessage(
-        `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg（生成值以 5 kg 為單位）的設定範圍內，精準組成 ${ft(s.targetTons)} 公噸。請調整目標重量、淨重範圍或車輛空車重。`,
+        `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg（生成值以 1 kg 為單位）的設定範圍內，精準組成 ${ft(s.targetTons)} 公噸。請調整目標重量、淨重範圍或車輛空車重。`,
       );
       return null;
     }
@@ -424,18 +416,18 @@ function buildRecordPlan() {
     return null;
   }
 
-  // 分配不重複淨重；每一筆為 5 kg 倍數，並保留尾車可行空間。
+  // 分配不重複淨重；以 1 kg 為單位隨機分配，並保留尾車可行空間。
   const totalNetNeeded = batchTargetKg;
   const calculatedNetWeights = buildUniqueNetWeights(
     slots.length,
     totalNetNeeded,
-    netMin5,
-    netMax5,
+    netMinKg,
+    netMaxKg,
   );
 
   if (!calculatedNetWeights) {
     showMessage(
-      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 5 kg 為單位、累計淨重精準吻合」。請放寬淨重範圍或調整目標重量。`,
+      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 1 kg 為單位、累計淨重精準吻合」。請放寬淨重範圍或調整目標重量。`,
     );
     return null;
   }
@@ -575,7 +567,7 @@ function renderRecords() {
           (r) => `<tr>
 <td><span class="status-pill">${r.tripNo}</span></td>
 <td>${esc(r.customer)}</td><td>${esc(r.location)}</td><td>${esc(r.driver || "—")}</td><td><strong>${esc(r.vehicleNo)}</strong></td>
-<td>${esc(r.deliveryNo)}</td><td>${esc(r.documentType)}</td><td class="num">${fi(r.tareWeight)}</td><td class="num">${fi(r.netWeight)}</td><td class="num">${fi(r.grossWeight)}</td><td class="num">${ft(r.cumulativeTons)}</td><td>${esc(r.productName || "—")}</td>
+<td>${esc(r.deliveryNo)}</td><td>${esc(r.documentType)}</td><td class="num">${fi(r.tareWeight)}</td><td class="num">${fi(r.netWeight)}</td><td class="num">${fi(r.grossWeight)}</td><td class="num">${fc(r.cumulativeTons)}</td><td>${esc(r.productName || "—")}</td>
 <td>${r.date}</td>
 <td>${r.departureTime}</td>
 
