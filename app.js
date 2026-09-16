@@ -210,6 +210,14 @@ function nextDeliveryNo(base, index) {
   return m[1] + String(Number(m[2]) + index).padStart(m[2].length, "0");
 }
 function buildUniqueNetWeights(count, total, min, max) {
+  const shuffleLocal = (items) => {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
   if (count <= 0) return null;
   min = Math.ceil(num(min));
   max = Math.floor(num(max));
@@ -256,7 +264,7 @@ function buildUniqueNetWeights(count, total, min, max) {
       if (!used.has(value)) candidates.push(value);
     }
 
-    for (const value of shuffled(candidates)) {
+    for (const value of shuffleLocal(candidates)) {
       // 每台淨重都不同；相鄰車次盡量至少差 10 kg，讓數字看起來更自然。
       if (result.length && Math.abs(result[result.length - 1] - value) < 10) continue;
       used.add(value);
@@ -271,7 +279,7 @@ function buildUniqueNetWeights(count, total, min, max) {
     }
 
     // 若範圍很窄，放寬相鄰差距，但仍嚴格維持「每台不同」。
-    for (const value of shuffled(candidates)) {
+    for (const value of shuffleLocal(candidates)) {
       if (used.has(value)) continue;
       used.add(value);
       const nextTotal = remainingTotal - value;
