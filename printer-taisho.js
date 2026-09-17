@@ -186,7 +186,7 @@ function taishoRewriteWorkbookXml(templateXml, count) {
     const dn = doc.createElementNS(OOXML_NS, "definedName");
     dn.setAttribute("name", "_xlnm.Print_Area");
     dn.setAttribute("localSheetId", String(i));
-    dn.textContent = `'車次${String(i + 1).padStart(2, "0")}'!$A$2:$AQ$19`;
+    dn.textContent = `'車次${String(i + 1).padStart(2, "0")}'!$A$2:$AQ$22`;
     definedNames.appendChild(dn);
   }
   return serializeXml(doc);
