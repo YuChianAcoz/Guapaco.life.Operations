@@ -44,6 +44,7 @@ const PRINTER_CONFIG = {
       deliveryNo: { font: "Meiryo", size: 11.2 },
       tripNo: { font: "Meiryo", size: 12 },
       customerLocation: { font: "新細明體", size: 14 },
+      customerLocationBrackets: { font: "Meiryo", size: 14 },
       dispatcher: { font: "新細明體（本文）", size: 14 },
       vehicleNo: { font: "Meiryo", size: 12.5 },
       driver: { font: "Meiryo", size: 14 },
