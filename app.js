@@ -451,6 +451,176 @@ function arrangeNaturalNetWeights(weights) {
   return arranged;
 }
 
+function buildRecordPlan() {
+  const s = settings();
+  const err = validateSettings(s);
+  if (err) {
+    showMessage(err);
+    return null;
+  }
+
+  const vehicles = selectedVehicles(s);
+  const targetKg = Math.round(s.targetTons * 1000);
+  const currentCumulativeKg = Math.round(s.currentCumulativeTons * 1000);
+  const batchTargetKg = targetKg - currentCumulativeKg;
+  const netMinKg = Math.ceil(s.netMin);
+  const netMaxKg = Math.floor(s.netMax);
+  if (netMinKg > netMaxKg) {
+    showMessage("淨重範圍內沒有可用的整數公斤數，請調整淨重 Min／Max。");
+    return null;
+  }
+  let clock = minutes(s.startTime);
+  let dayOffset = 0;
+  let index = 0;
+  const lastUse = new Map();
+  const slots = [];
+  // 業主規則：目標累計淨重 = 每車「淨重」的累計，不包含空車重。
+
+  // 先排出車次，直到目標重量落在「所有車皆符合淨重 range」的可行區間內。
+  while (index < 10000) {
+    let chosen = null;
+    let tries = 0;
+
+    while (!chosen && tries < 5000) {
+      for (let offset = 0; offset < vehicles.length; offset++) {
+        const v = vehicles[(index + offset) % vehicles.length];
+        const absolute = dayOffset * 1440 + clock;
+        const last = lastUse.get(v.vehicleNo);
+        if (last === undefined || absolute - last >= 120) {
+          chosen = v;
+          break;
+        }
+      }
+
+      if (!chosen) {
+        clock += randomInteger(s.intervalMin, s.intervalMax);
+        if (clock >= 1440) {
+          dayOffset += Math.floor(clock / 1440);
+          clock %= 1440;
+        }
+        tries++;
+      }
+    }
+
+    if (!chosen) {
+      showMessage("無法排出符合兩小時限制的車次。");
+      return null;
+    }
+
+    const tareSource = s.tareHint > 0 ? s.tareHint : chosen.tareWeight;
+    const tare = num(tareSource);
+    if (tare <= 0) {
+      showMessage(`車號 ${chosen.vehicleNo} 的空車重不正確。`);
+      return null;
+    }
+
+    const absolute = dayOffset * 1440 + clock;
+    lastUse.set(chosen.vehicleNo, absolute);
+    slots.push({
+      chosen,
+      tare,
+      date: addDays(s.date, dayOffset),
+      departureTime: timeText(clock),
+    });
+    index++;
+
+    const minPossible = index * netMinKg;
+    const maxPossible = index * netMaxKg;
+
+    if (batchTargetKg >= minPossible && batchTargetKg <= maxPossible) break;
+
+    // 最小可能重量已大於目標，增加車次只會更重，代表目前條件無解。
+    if (minPossible > batchTargetKg) {
+      showMessage(
+        `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg（生成值以 1 kg 為單位）的設定範圍內，精準組成 ${ft(s.targetTons)} 公噸。請調整目標重量、淨重範圍或車輛空車重。`,
+      );
+      return null;
+    }
+
+    clock += randomInteger(s.intervalMin, s.intervalMax);
+    if (clock >= 1440) {
+      dayOffset += Math.floor(clock / 1440);
+      clock %= 1440;
+    }
+  }
+
+  if (!slots.length || slots.length >= 10000) {
+    showMessage("生成筆數過多，請檢查重量設定。");
+    return null;
+  }
+
+  // 分配不重複淨重；以 1 kg 為單位隨機分配，並保留尾車可行空間。
+  const totalNetNeeded = batchTargetKg;
+  const calculatedNetWeights = buildUniqueNetWeights(
+    slots.length,
+    totalNetNeeded,
+    netMinKg,
+    netMaxKg,
+  );
+
+  if (!calculatedNetWeights) {
+    showMessage(
+      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 1 kg 為單位、累計淨重精準吻合」。請放寬淨重範圍或調整目標重量。`,
+    );
+    return null;
+  }
+
+  const netWeights = arrangeNaturalNetWeights(calculatedNetWeights);
+
+  let cumulativeNet = currentCumulativeKg;
+  const records = slots.map((slot, i) => {
+    const net = netWeights[i];
+    const gross = slot.tare + net;
+    cumulativeNet += net;
+    return {
+      id: uid(),
+      tripNo: s.tripNoStart + i,
+      date: slot.date,
+      departureTime: slot.departureTime,
+      vehicleNo: slot.chosen.vehicleNo,
+      driver: s.driver || "",
+      deliveryNo: s.customer === "新兆豐營造" ? s.deliveryNoStart : nextDeliveryNo(s.deliveryNoStart, i),
+      documentType: s.documentType,
+      tareWeight: slot.tare,
+      netWeight: net,
+      grossWeight: gross,
+      cumulativeTons: cumulativeNet / 1000,
+      customer: s.customer,
+      location: s.location,
+      productName: s.productName,
+      consignment: s.consignment,
+      dispatcher: s.dispatcher,
+      qualityControl: s.qualityControl,
+      supervisor: s.supervisor,
+      temperature: s.temperature,
+      oilLarge: s.oilLarge,
+      oilSmall: s.oilSmall,
+      note: s.note,
+      createdAt: new Date().toISOString(),
+      conditionSnapshot: {
+        netMin: s.netMin,
+        netMax: s.netMax,
+        targetTons: s.targetTons,
+        currentCumulativeTons: s.currentCumulativeTons,
+        tripNoStart: s.tripNoStart,
+        intervalMin: s.intervalMin,
+        intervalMax: s.intervalMax,
+      },
+    };
+  });
+
+  const last = records.at(-1);
+  const actualTons = last?.cumulativeTons || 0;
+  return {
+    records,
+    targetTons: s.targetTons,
+    actualTons,
+    overTons: actualTons - s.targetTons,
+    endDate: last?.date || "",
+    endTime: last?.departureTime || "",
+  };
+}
+
 function previewAndConfirmGenerate() {
   const plan = buildRecordPlan();
   if (!plan) return;
