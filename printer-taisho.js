@@ -29,6 +29,48 @@ function taishoSetRich(doc, address, value, fontCfg) {
     font: fontCfg.font,
     size: fontCfg.size,
   }]);
+
+
+  
+}
+
+function taishoSetCustomerLocationRich(doc, address, value, fonts) {
+  const text = String(value || "");
+  const runs = [];
+
+  for (const ch of text) {
+    const cfgFont = /[()（）]/.test(ch)
+      ? fonts.customerLocationBrackets
+      : fonts.customerLocation;
+
+    const last = runs[runs.length - 1];
+
+    if (
+      last &&
+      last.font === cfgFont.font &&
+      last.size === cfgFont.size
+    ) {
+      last.text += ch;
+    } else {
+      runs.push({
+        text: ch,
+        font: cfgFont.font,
+        size: cfgFont.size,
+      });
+    }
+  }
+
+  setOoxmlRichTextCell(
+    doc,
+    address,
+    runs.length
+      ? runs
+      : [{
+          text: "",
+          font: fonts.customerLocation.font,
+          size: fonts.customerLocation.size,
+        }]
+  );
 }
 
 function taishoFormatKg(value) {
@@ -54,8 +96,8 @@ function fillTaishoSheetXml(templateXml, r) {
   taishoSetRich(doc, c.documentType, taishoDocumentText(r.documentType), f.documentType);
     taishoSetRich(doc, c.tripNo, r.tripNo || "", f.tripNo);
 
-  taishoSetRich(doc, c.customer, r.customer || "", f.customerLocation);
-  taishoSetRich(doc, c.location, r.location || "", f.customerLocation);
+  taishoSetCustomerLocationRich(doc, c.customer, r.customer || "", f);
+  taishoSetCustomerLocationRich(doc, c.location, r.location || "", f);
   // 廠商新版原始模板在「司機」與「出廠時間」字首都保留 1 個半形空格。
   // 必須保留此前置空格，才能與調度員／車號的左緣對齊。
   taishoSetRich(doc, c.driver, r.driver ? ` (${r.driver})` : "", f.driver);
