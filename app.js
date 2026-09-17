@@ -210,316 +210,245 @@ function nextDeliveryNo(base, index) {
   return m[1] + String(Number(m[2]) + index).padStart(m[2].length, "0");
 }
 function buildUniqueNetWeights(count, total, min, max) {
-  const shuffleLocal = (items) => {
-    const copy = [...items];
-    for (let i = copy.length - 1; i > 0; i--) {
+  if (!count || count <= 0) return [];
+
+  // 廠商規則：淨重只能以 10 kg 為單位
+  const STEP = 10;
+
+  // 前後車理想差距：200～300 kg
+  const IDEAL_GAP_MIN = 200;
+  const IDEAL_GAP_MAX = 300;
+
+  // 將上下限整理成 10 kg 的倍數
+  const low = Math.ceil(min / STEP) * STEP;
+  const high = Math.floor(max / STEP) * STEP;
+
+  // 因為每台都是 10 kg 倍數，所以總重量也必須是 10 kg 倍數
+  if (total % STEP !== 0) {
+    console.warn("目標總重量不是 10 kg 的倍數，無法全部使用尾數 0 的淨重");
+    return null;
+  }
+
+  if (total < low * count || total > high * count) {
+    return null;
+  }
+
+  // 建立所有可能重量
+  const allValues = [];
+
+  for (let value = low; value <= high; value += STEP) {
+    allValues.push(value);
+  }
+
+  // Fisher-Yates shuffle
+  function shuffleLocal(items) {
+    const arr = [...items];
+
+    for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    return copy;
-  };
-  if (count <= 0) return null;
-  min = Math.ceil(num(min));
-  max = Math.floor(num(max));
-  total = Math.round(num(total));
-  if (min > max || max - min + 1 < count) return null;
+
+    return arr;
+  }
 
   const result = [];
   const used = new Set();
 
-  function availableBounds(remainingCount, excluded) {
-    const lows = [];
-    const highs = [];
-    for (let value = min; value <= max && lows.length < remainingCount; value++) {
-      if (!excluded.has(value)) lows.push(value);
+  function availableBounds(remainingCount, usedValues) {
+    if (remainingCount === 0) {
+      return {
+        minSum: 0,
+        maxSum: 0,
+      };
     }
-    for (let value = max; value >= min && highs.length < remainingCount; value--) {
-      if (!excluded.has(value)) highs.push(value);
+
+    const available = allValues.filter(v => !usedValues.has(v));
+
+    if (available.length < remainingCount) {
+      return null;
     }
-    if (lows.length < remainingCount || highs.length < remainingCount) return null;
+
+    const ascending = [...available].sort((a, b) => a - b);
+
+    const minSum = ascending
+      .slice(0, remainingCount)
+      .reduce((sum, v) => sum + v, 0);
+
+    const maxSum = ascending
+      .slice(-remainingCount)
+      .reduce((sum, v) => sum + v, 0);
+
     return {
-      minSum: lows.reduce((a, b) => a + b, 0),
-      maxSum: highs.reduce((a, b) => a + b, 0),
+      minSum,
+      maxSum,
     };
   }
 
   function search(index, remainingTotal) {
     const remainingCount = count - index;
-    if (remainingCount === 0) return remainingTotal === 0;
 
+    if (remainingCount === 0) {
+      return remainingTotal === 0;
+    }
+
+    // 最後一台直接處理
     if (remainingCount === 1) {
-      if (remainingTotal >= min && remainingTotal <= max && !used.has(remainingTotal)) {
-        result.push(remainingTotal);
+      const value = remainingTotal;
+
+      if (
+        value >= low &&
+        value <= high &&
+        value % STEP === 0 &&
+        !used.has(value)
+      ) {
+        result.push(value);
         return true;
       }
+
       return false;
     }
 
-    const low = Math.max(min, remainingTotal - (remainingCount - 1) * max);
-    const high = Math.min(max, remainingTotal - (remainingCount - 1) * min);
-    if (low > high) return false;
+    let candidates = allValues.filter(value => !used.has(value));
 
-    const candidates = [];
-    for (let value = low; value <= high; value++) {
-     if (!used.has(value)) {
-    candidates.push(value);
-  }
-}
+    // 先打亂，避免每次都產生完全一樣的數字
+    candidates = shuffleLocal(candidates);
 
-// 先隨機，再把「不是 5 的倍數」排在前面。
-// 例如 30487、30512、30469 會優先於 30485、30500。
-const randomizedCandidates = shuffleLocal(candidates);
+    if (result.length) {
+      const previous = result[result.length - 1];
 
-randomizedCandidates.sort((a, b) => {
-  const aIsFive = a % 5 === 0;
-  const bIsFive = b % 5 === 0;
+      // 分成三組：
+      // 1. 優先 200～300 kg
+      // 2. 其次 > 300 kg
+      // 3. 最後才接受 < 200 kg
+      const ideal = [];
+      const large = [];
+      const close = [];
 
-  if (aIsFive !== bIsFive) {
-    return aIsFive ? 1 : -1;
-  }
+      for (const value of candidates) {
+        const gap = Math.abs(previous - value);
 
-  return 0;
-});
+        if (gap >= IDEAL_GAP_MIN && gap <= IDEAL_GAP_MAX) {
+          ideal.push(value);
+        } else if (gap > IDEAL_GAP_MAX) {
+          large.push(value);
+        } else {
+          close.push(value);
+        }
+      }
 
-    for (const value of randomizedCandidates) {
-      // 每台淨重都不同；相鄰車次盡量至少差 10 kg，讓數字看起來更自然。
-      if (result.length && Math.abs(result[result.length - 1] - value) < 10) continue;
+      candidates = [
+        ...shuffleLocal(ideal),
+        ...shuffleLocal(large),
+        ...shuffleLocal(close),
+      ];
+    }
+
+    for (const value of candidates) {
       used.add(value);
+
       const nextTotal = remainingTotal - value;
-      const bounds = availableBounds(remainingCount - 1, used);
-      if (bounds && nextTotal >= bounds.minSum && nextTotal <= bounds.maxSum) {
+
+      const bounds = availableBounds(
+        remainingCount - 1,
+        used
+      );
+
+      if (
+        bounds &&
+        nextTotal >= bounds.minSum &&
+        nextTotal <= bounds.maxSum
+      ) {
         result.push(value);
-        if (search(index + 1, nextTotal)) return true;
+
+        if (search(index + 1, nextTotal)) {
+          return true;
+        }
+
         result.pop();
       }
+
       used.delete(value);
     }
 
-    // 若範圍很窄，放寬相鄰差距，但仍嚴格維持「每台不同」。
-    for (const value of shuffleLocal(candidates)) {
-      if (used.has(value)) continue;
-      used.add(value);
-      const nextTotal = remainingTotal - value;
-      const bounds = availableBounds(remainingCount - 1, used);
-      if (bounds && nextTotal >= bounds.minSum && nextTotal <= bounds.maxSum) {
-        result.push(value);
-        if (search(index + 1, nextTotal)) return true;
-        result.pop();
-      }
-      used.delete(value);
-    }
     return false;
   }
 
-  return search(0, total) ? result : null;
+  if (!search(0, total)) {
+    return null;
+  }
+
+  return result;
 }
 
 function arrangeNaturalNetWeights(weights) {
-  if (!Array.isArray(weights) || weights.length < 2) return weights;
+  if (!Array.isArray(weights) || weights.length <= 1) {
+    return weights;
+  }
 
+  // 廠商要求：最後一車一定要是全部車次中最小的淨重
   const sorted = [...weights].sort((a, b) => a - b);
-  const roll = Math.random();
-  let tailPool;
-  let strategy;
 
-  if (roll < 0.3) {
-    tailPool = [sorted[0]];
-    strategy = "lightest";
-  } else if (roll < 0.6) {
-    tailPool = [sorted[sorted.length - 1]];
-    strategy = "heaviest";
-  } else {
-    tailPool = sorted.slice(1, -1);
-    if (!tailPool.length) tailPool = [...sorted];
-    strategy = "middle";
+  const smallest = sorted.shift();
+
+  // 剩下的重量負責排列前面的車次
+  const remaining = [...sorted];
+
+  if (!remaining.length) {
+    return [smallest];
   }
 
-  // 嘗試多種排列，確保相鄰兩台至少相差 10 kg，尾車則依本批策略落在最輕、最重或中間。
-  for (let attempt = 0; attempt < 1500; attempt++) {
-    const tail = tailPool[Math.floor(Math.random() * tailPool.length)];
-    const remaining = shuffled(weights.filter((value) => value !== tail));
-    const candidate = [...remaining, tail];
-    const natural = candidate.every(
-      (value, index) => index === 0 || Math.abs(value - candidate[index - 1]) >= 10,
-    );
-    if (natural) {
-      candidate.tailStrategy = strategy;
-      return candidate;
-    }
-  }
+  // 隨機選一台作為第一車
+  const startIndex = Math.floor(Math.random() * remaining.length);
+  const arranged = [remaining.splice(startIndex, 1)[0]];
 
-  // 極窄 range 下若無法排出理想順序，保留原本已符合總重與不重複條件的結果。
-  return weights;
-}
+  while (remaining.length) {
+    const previous = arranged[arranged.length - 1];
 
-function buildRecordPlan() {
-  const s = settings();
-  const err = validateSettings(s);
-  if (err) {
-    showMessage(err);
-    return null;
-  }
+    // 優先尋找與上一車相差 200～300 kg 的重量
+    let idealIndexes = [];
 
-  const vehicles = selectedVehicles(s);
-  const targetKg = Math.round(s.targetTons * 1000);
-  const currentCumulativeKg = Math.round(s.currentCumulativeTons * 1000);
-  const batchTargetKg = targetKg - currentCumulativeKg;
-  const netMinKg = Math.ceil(s.netMin);
-  const netMaxKg = Math.floor(s.netMax);
-  if (netMinKg > netMaxKg) {
-    showMessage("淨重範圍內沒有可用的整數公斤數，請調整淨重 Min／Max。");
-    return null;
-  }
-  let clock = minutes(s.startTime);
-  let dayOffset = 0;
-  let index = 0;
-  const lastUse = new Map();
-  const slots = [];
-  // 業主規則：目標累計淨重 = 每車「淨重」的累計，不包含空車重。
+    for (let i = 0; i < remaining.length; i++) {
+      const gap = Math.abs(remaining[i] - previous);
 
-  // 先排出車次，直到目標重量落在「所有車皆符合淨重 range」的可行區間內。
-  while (index < 10000) {
-    let chosen = null;
-    let tries = 0;
-
-    while (!chosen && tries < 5000) {
-      for (let offset = 0; offset < vehicles.length; offset++) {
-        const v = vehicles[(index + offset) % vehicles.length];
-        const absolute = dayOffset * 1440 + clock;
-        const last = lastUse.get(v.vehicleNo);
-        if (last === undefined || absolute - last >= 120) {
-          chosen = v;
-          break;
-        }
-      }
-
-      if (!chosen) {
-        clock += randomInteger(s.intervalMin, s.intervalMax);
-        if (clock >= 1440) {
-          dayOffset += Math.floor(clock / 1440);
-          clock %= 1440;
-        }
-        tries++;
+      if (gap >= 200 && gap <= 300) {
+        idealIndexes.push(i);
       }
     }
 
-    if (!chosen) {
-      showMessage("無法排出符合兩小時限制的車次。");
-      return null;
+    let selectedIndex;
+
+    if (idealIndexes.length) {
+      // 有多個符合 200～300 kg 時隨機選
+      selectedIndex =
+        idealIndexes[
+          Math.floor(Math.random() * idealIndexes.length)
+        ];
+    } else {
+      // 找不到 200～300 kg 時，
+      // 選擇與上一車差距最大的，避免數字太接近
+      selectedIndex = 0;
+      let biggestGap = -1;
+
+      for (let i = 0; i < remaining.length; i++) {
+        const gap = Math.abs(remaining[i] - previous);
+
+        if (gap > biggestGap) {
+          biggestGap = gap;
+          selectedIndex = i;
+        }
+      }
     }
 
-    const tareSource = s.tareHint > 0 ? s.tareHint : chosen.tareWeight;
-    const tare = num(tareSource);
-    if (tare <= 0) {
-      showMessage(`車號 ${chosen.vehicleNo} 的空車重不正確。`);
-      return null;
-    }
-
-    const absolute = dayOffset * 1440 + clock;
-    lastUse.set(chosen.vehicleNo, absolute);
-    slots.push({
-      chosen,
-      tare,
-      date: addDays(s.date, dayOffset),
-      departureTime: timeText(clock),
-    });
-    index++;
-
-    const minPossible = index * netMinKg;
-    const maxPossible = index * netMaxKg;
-
-    if (batchTargetKg >= minPossible && batchTargetKg <= maxPossible) break;
-
-    // 最小可能重量已大於目標，增加車次只會更重，代表目前條件無解。
-    if (minPossible > batchTargetKg) {
-      showMessage(
-        `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg（生成值以 1 kg 為單位）的設定範圍內，精準組成 ${ft(s.targetTons)} 公噸。請調整目標重量、淨重範圍或車輛空車重。`,
-      );
-      return null;
-    }
-
-    clock += randomInteger(s.intervalMin, s.intervalMax);
-    if (clock >= 1440) {
-      dayOffset += Math.floor(clock / 1440);
-      clock %= 1440;
-    }
-  }
-
-  if (!slots.length || slots.length >= 10000) {
-    showMessage("生成筆數過多，請檢查重量設定。");
-    return null;
-  }
-
-  // 分配不重複淨重；以 1 kg 為單位隨機分配，並保留尾車可行空間。
-  const totalNetNeeded = batchTargetKg;
-  const calculatedNetWeights = buildUniqueNetWeights(
-    slots.length,
-    totalNetNeeded,
-    netMinKg,
-    netMaxKg,
-  );
-
-  if (!calculatedNetWeights) {
-    showMessage(
-      `無法在淨重 ${fi(s.netMin)}～${fi(s.netMax)} kg 的範圍內，同時達成「每台淨重不重複、以 1 kg 為單位、累計淨重精準吻合」。請放寬淨重範圍或調整目標重量。`,
+    arranged.push(
+      remaining.splice(selectedIndex, 1)[0]
     );
-    return null;
   }
 
-  const netWeights = arrangeNaturalNetWeights(calculatedNetWeights);
+  // 最後才放最小值
+  arranged.push(smallest);
 
-  let cumulativeNet = currentCumulativeKg;
-  const records = slots.map((slot, i) => {
-    const net = netWeights[i];
-    const gross = slot.tare + net;
-    cumulativeNet += net;
-    return {
-      id: uid(),
-      tripNo: s.tripNoStart + i,
-      date: slot.date,
-      departureTime: slot.departureTime,
-      vehicleNo: slot.chosen.vehicleNo,
-      driver: s.driver || "",
-      deliveryNo: s.customer === "新兆豐營造" ? s.deliveryNoStart : nextDeliveryNo(s.deliveryNoStart, i),
-      documentType: s.documentType,
-      tareWeight: slot.tare,
-      netWeight: net,
-      grossWeight: gross,
-      cumulativeTons: cumulativeNet / 1000,
-      customer: s.customer,
-      location: s.location,
-      productName: s.productName,
-      consignment: s.consignment,
-      dispatcher: s.dispatcher,
-      qualityControl: s.qualityControl,
-      supervisor: s.supervisor,
-      temperature: s.temperature,
-      oilLarge: s.oilLarge,
-      oilSmall: s.oilSmall,
-      note: s.note,
-      createdAt: new Date().toISOString(),
-      conditionSnapshot: {
-        netMin: s.netMin,
-        netMax: s.netMax,
-        targetTons: s.targetTons,
-        currentCumulativeTons: s.currentCumulativeTons,
-        tripNoStart: s.tripNoStart,
-        intervalMin: s.intervalMin,
-        intervalMax: s.intervalMax,
-      },
-    };
-  });
-
-  const last = records.at(-1);
-  const actualTons = last?.cumulativeTons || 0;
-  return {
-    records,
-    targetTons: s.targetTons,
-    actualTons,
-    overTons: actualTons - s.targetTons,
-    endDate: last?.date || "",
-    endTime: last?.departureTime || "",
-  };
+  return arranged;
 }
 
 function previewAndConfirmGenerate() {
