@@ -39,7 +39,7 @@ const PRINTER_CONFIG = {
       deliveryNo: 6,
     },
     fonts: {
-      date: { font: "Meiryo", size: 13 },
+      date: { font: "Meiryo", size: 12.5 },
       documentType: { font: "新細明體", size: 19 },
       deliveryNo: { font: "Meiryo", size: 11.2 },
       tripNo: { font: "Meiryo", size: 12 },
