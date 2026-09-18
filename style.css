@@ -156,6 +156,44 @@ dialog::backdrop { background: rgba(18, 31, 38, .48); }
   padding: 12px 16px; border-radius: 10px; background: #1f353f; color: white; box-shadow: var(--shadow);
 }
 
+/* 車輛主檔拖曳排序 */
+
+.vehicle-row {
+  transition: opacity 0.15s ease;
+}
+
+.vehicle-row[draggable="true"] {
+  cursor: grab;
+}
+
+.vehicle-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.drag-cell {
+  width: 48px;
+  text-align: center;
+}
+
+.drag-handle {
+  display: inline-block;
+  padding: 4px 8px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #7b8b94;
+  cursor: grab;
+  user-select: none;
+}
+
+.vehicle-row.dragging {
+  opacity: 0.4;
+}
+
+.vehicle-row.drag-over {
+  outline: 2px dashed #9aaab3;
+  outline-offset: -2px;
+}
+
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 1fr; grid-template-areas: "vehicles" "form" "records"; }
   .vehicle-table-wrap { max-height: 300px; }
