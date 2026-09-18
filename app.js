@@ -113,19 +113,64 @@ function renderVehicleSelect() {
 }
 function renderVehicles() {
   const q = el("vehicleSearch").value.trim().toUpperCase();
+
   const rows = state.vehicles
     .map((v, i) => ({ ...v, i }))
     .filter((v) => !q || v.vehicleNo.includes(q));
+
   el("vehicleCount").textContent =
     `${state.vehicles.length} 輛／${state.vehicles.filter((v) => v.enabled).length} 輛啟用`;
+
   el("vehicleTbody").innerHTML = rows.length
     ? rows
         .map(
-          (v) =>
-            `<tr><td><input class="checkbox" type="checkbox" data-action="toggle" data-index="${v.i}" ${v.enabled ? "checked" : ""}></td><td><strong>${esc(v.vehicleNo)}</strong></td><td class="num">${fi(v.tareWeight)}</td><td><button class="action-link" data-action="edit" data-index="${v.i}">編輯</button><button class="action-link danger" data-action="delete" data-index="${v.i}">刪除</button></td></tr>`,
+          (v) => `
+            <tr
+              draggable="${q ? "false" : "true"}"
+              data-vehicle-index="${v.i}"
+              class="vehicle-row"
+            >
+              <td class="drag-cell">
+                <span class="drag-handle" title="拖曳排序">☰</span>
+              </td>
+
+              <td>
+                <input
+                  class="checkbox"
+                  type="checkbox"
+                  data-action="toggle"
+                  data-index="${v.i}"
+                  ${v.enabled ? "checked" : ""}
+                >
+              </td>
+
+              <td>
+                <strong>${esc(v.vehicleNo)}</strong>
+              </td>
+
+              <td class="num">
+                ${fi(v.tareWeight)}
+              </td>
+
+              <td>
+                <button
+                  class="action-link"
+                  data-action="edit"
+                  data-index="${v.i}"
+                >編輯</button>
+
+                <button
+                  class="action-link danger"
+                  data-action="delete"
+                  data-index="${v.i}"
+                >刪除</button>
+              </td>
+            </tr>
+          `,
         )
         .join("")
-    : '<tr><td colspan="4" class="empty-cell">沒有車輛資料</td></tr>';
+    : '<tr><td colspan="5" class="empty-cell">沒有車輛資料</td></tr>';
+
   renderVehicleSelect();
   updateEstimate();
 }
@@ -1413,6 +1458,88 @@ async function exportPrinterWorkbook() {
     btn.textContent = oldText;
   }
 }
+
+let draggedVehicleIndex = null;
+
+el("vehicleTbody").addEventListener("dragstart", (e) => {
+  const row = e.target.closest(".vehicle-row");
+
+  if (!row) return;
+
+  // 搜尋中禁止排序
+  if (el("vehicleSearch").value.trim()) {
+    e.preventDefault();
+    return;
+  }
+
+  draggedVehicleIndex = Number(row.dataset.vehicleIndex);
+
+  row.classList.add("dragging");
+
+  e.dataTransfer.effectAllowed = "move";
+});
+
+el("vehicleTbody").addEventListener("dragend", (e) => {
+  const row = e.target.closest(".vehicle-row");
+
+  if (row) {
+    row.classList.remove("dragging");
+  }
+
+  draggedVehicleIndex = null;
+
+  document
+    .querySelectorAll(".vehicle-row")
+    .forEach((r) => r.classList.remove("drag-over"));
+});
+
+el("vehicleTbody").addEventListener("dragover", (e) => {
+  e.preventDefault();
+
+  const row = e.target.closest(".vehicle-row");
+
+  if (!row) return;
+
+  document
+    .querySelectorAll(".vehicle-row")
+    .forEach((r) => r.classList.remove("drag-over"));
+
+  row.classList.add("drag-over");
+
+  e.dataTransfer.dropEffect = "move";
+});
+
+el("vehicleTbody").addEventListener("drop", (e) => {
+  e.preventDefault();
+
+  const targetRow = e.target.closest(".vehicle-row");
+
+  if (!targetRow || draggedVehicleIndex === null) return;
+
+  const targetIndex = Number(targetRow.dataset.vehicleIndex);
+
+  if (targetIndex === draggedVehicleIndex) return;
+
+  // 把原本的車取出
+  const [movedVehicle] = state.vehicles.splice(
+    draggedVehicleIndex,
+    1
+  );
+
+  // splice 後 index 會改變，所以要修正
+  let insertIndex = targetIndex;
+
+  if (draggedVehicleIndex < targetIndex) {
+    insertIndex--;
+  }
+
+  state.vehicles.splice(insertIndex, 0, movedVehicle);
+
+  save();
+  renderVehicles();
+
+  toast("車輛排序已更新");
+});
 
 el("vehicleTbody").addEventListener("click", (e) => {
   const t = e.target.closest("[data-action]");
