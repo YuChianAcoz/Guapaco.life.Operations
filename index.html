@@ -25,8 +25,21 @@
   <section class="panel vehicle-panel">
     <div class="panel-heading"><div><h2>一、車輛主檔</h2><span id="vehicleCount" class="muted"></span></div><button id="addVehicleBtn" class="icon-btn">＋</button></div>
     <div class="search-wrap"><input id="vehicleSearch" type="search" placeholder="搜尋車號…" /><div class="vehicle-bulk-actions"><button id="selectAllVehiclesBtn" type="button" class="btn ghost">全選</button><button id="deselectAllVehiclesBtn" type="button" class="btn ghost">全取消</button></div></div>
-    <div class="table-wrap vehicle-table-wrap"><table><thead><tr><th>啟用</th><th>車號</th><th class="num">空車重（kg）</th><th>操作</th></tr></thead><tbody id="vehicleTbody"></tbody></table></div>
-    <p class="helper">勾選要參與自動排程的車輛；同一車號再次出廠必須間隔至少 120 分鐘。</p>
+    <div class="table-wrap vehicle-table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>排序</th>
+        <th>啟用</th>
+        <th>車號</th>
+        <th class="num">空車重（kg）</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody id="vehicleTbody"></tbody>
+  </table>
+</div>
+    <p class="helper">拖曳 ☰ 可調整自動排程的車輛順序；勾選要參與自動排程的車輛；同一車號再次出廠必須間隔至少 120 分鐘。</p>
   </section>
 
   <section class="panel form-panel">
