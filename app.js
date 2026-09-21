@@ -913,19 +913,32 @@ function saveRecord(e) {
     warnings.length ? "已儲存，資料含條件警告" : "資料已儲存並重新連動計算",
   );
 }
+function parseVehicleEnabled(value, fallback = true) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const text = String(value).trim().toLowerCase();
+  if (["否", "不啟用", "停用", "false", "no", "n", "0", "off", "x", "✗"].includes(text)) return false;
+  if (["是", "啟用", "true", "yes", "y", "1", "on", "v", "✓", "✔"].includes(text)) return true;
+  return fallback;
+}
 function parseRows(rows) {
   return rows
     .map((row) => {
       const ks = Object.keys(row),
         nk = ks.find((k) => /車號|車牌|vehicle/i.test(k)),
-        tk = ks.find((k) => /空車|空重|tare/i.test(k));
+        tk = ks.find((k) => /空車|空重|tare/i.test(k)),
+        ek = ks.find((k) => /啟用|啟動|enabled|active/i.test(k));
       return nk && tk
         ? {
             vehicleNo: String(row[nk] || "")
               .trim()
               .toUpperCase(),
             tareWeight: num(row[tk]),
-            enabled: true,
+            // 有「啟用/啟動」欄時尊重 Excel；沒有欄位時先標記為 undefined，
+            // 讓 importExcel 保留系統內既有車輛的勾選狀態。
+            enabled: ek ? parseVehicleEnabled(row[ek], true) : undefined,
           }
         : null;
     })
@@ -940,9 +953,15 @@ async function importExcel(file) {
     parsed = parseRows(rows);
   if (!parsed.length) return alert("找不到車號與空車重欄位");
   const map = new Map(state.vehicles.map((v) => [v.vehicleNo, v]));
-  parsed.forEach((v) =>
-    map.set(v.vehicleNo, { ...map.get(v.vehicleNo), ...v }),
-  );
+  parsed.forEach((v) => {
+    const existing = map.get(v.vehicleNo);
+    map.set(v.vehicleNo, {
+      ...existing,
+      ...v,
+      // Excel 有啟用欄就採用 Excel；沒有則保留既有狀態，新車預設啟用。
+      enabled: v.enabled === undefined ? (existing?.enabled ?? true) : v.enabled,
+    });
+  });
   state.vehicles = [...map.values()];
   save();
   renderVehicles();
